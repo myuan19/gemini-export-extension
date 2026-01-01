@@ -243,6 +243,16 @@
         const trigger = document.getElementById('export-trigger');
         const style = document.getElementById('gemini-export-theme-style');
         
+        // 计算主按钮悬停颜色
+        let primaryHoverColor;
+        if (newTheme === 'dark') {
+            // 暗色主题：使用浅一点的蓝色
+            primaryHoverColor = '#aecbfa';
+        } else {
+            // 亮色主题：使用深一点的蓝色
+            primaryHoverColor = '#1557b0';
+        }
+        
         if (style) {
             style.textContent = `
                 #gemini-export-sidebar { 
@@ -289,7 +299,11 @@
                     border: none !important;
                 }
                 .gemini-btn-primary:hover { 
-                    opacity: 0.9;
+                    background: ${primaryHoverColor} !important;
+                }
+                .gemini-btn:disabled { 
+                    opacity: 0.6 !important; 
+                    cursor: not-allowed !important; 
                 }
                 #export-trigger { 
                     background: ${colors.triggerBg} !important;
@@ -360,10 +374,54 @@
             .gemini-btn-small:hover { background: #f1f3f4; border-color: #1a73e8; }
             .gemini-preview { flex: 1; overflow-y: auto; padding: 20px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; background: #fff; color: #333; transition: background-color 0.3s, color 0.3s; }
             .gemini-footer { padding: 16px; border-top: 1px solid #e0e0e0; background: #f8f9fa; display: flex; gap: 12px; transition: background-color 0.3s, border-color 0.3s, color 0.3s; }
-            .gemini-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #dadce0; background: white; color: #202124; cursor: pointer; font-weight: 500; transition: 0.2s; }
+            .gemini-btn { 
+                flex: 1; 
+                padding: 10px; 
+                border-radius: 8px; 
+                border: 1px solid #dadce0; 
+                background: white; 
+                color: #202124; 
+                cursor: pointer; 
+                font-weight: 500; 
+                transition: all 0.2s; 
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                position: relative;
+                min-height: 40px;
+            }
             .gemini-btn:hover { background: #f1f3f4; }
+            .gemini-btn:active { transform: scale(0.98); }
             .gemini-btn-primary { background: #1a73e8; color: white; border: none; }
-            .gemini-btn-primary:hover { opacity: 0.9; }
+            .gemini-btn-primary:hover { background: #1557b0; }
+            .gemini-btn-primary:active { transform: scale(0.98); }
+            .gemini-btn .btn-icon { 
+                font-size: 16px; 
+                line-height: 1;
+                display: inline-block;
+                transition: transform 0.2s;
+            }
+            .gemini-btn .btn-text { 
+                font-size: 14px;
+                white-space: nowrap;
+            }
+            .gemini-btn.success .btn-icon { 
+                transform: scale(1.2);
+            }
+            .gemini-btn.success { 
+                animation: successPulse 0.3s ease-out;
+            }
+            @keyframes successPulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.05); }
+                100% { transform: scale(1); }
+            }
+            .gemini-btn:disabled { 
+                opacity: 0.6; 
+                cursor: not-allowed; 
+                pointer-events: none;
+            }
             #export-cb-column { position: absolute; left: 0; top: 0; width: 60px; pointer-events: none; z-index: 2147483640; display: none; }
             body.export-open #export-cb-column { display: block; }
             .cb-wrapper { position: absolute; left: 20px; pointer-events: auto; width: 20px; height: 20px; }
@@ -457,8 +515,14 @@
             </div>
             <div class="gemini-preview" id="gemini-md-preview">请在左侧勾选消息进行导出...</div>
             <div class="gemini-footer">
-                <button class="gemini-btn" id="gemini-download">下载 Markdown</button>
-                <button class="gemini-btn gemini-btn-primary" id="gemini-copy">复制内容</button>
+                <button class="gemini-btn" id="gemini-download">
+                    <span class="btn-icon">⬇️</span>
+                    <span class="btn-text">下载 Markdown</span>
+                </button>
+                <button class="gemini-btn gemini-btn-primary" id="gemini-copy">
+                    <span class="btn-icon">📋</span>
+                    <span class="btn-text">复制内容</span>
+                </button>
             </div>
         `;
         document.body.appendChild(sb);
@@ -1140,17 +1204,211 @@
     async function handleCopy() {
         const text = document.getElementById('gemini-md-preview').textContent;
         if (!text || text.startsWith("请勾选")) return;
-        await navigator.clipboard.writeText(text);
-        const btn = document.getElementById('gemini-copy'), oldText = btn.innerText;
-        btn.innerText = '✓ 已复制'; setTimeout(() => btn.innerText = oldText, 2000);
+        
+        const btn = document.getElementById('gemini-copy');
+        const btnIcon = btn.querySelector('.btn-icon');
+        const btnText = btn.querySelector('.btn-text');
+        
+        // 如果正在处理中，直接返回
+        if (btn._isProcessing) return;
+        
+        // 如果已经有恢复定时器，清除它
+        if (btn._restoreTimeout) {
+            clearTimeout(btn._restoreTimeout);
+            btn._restoreTimeout = null;
+        }
+        
+        // 如果已经有鼠标进入事件处理器，清除它
+        if (btn._mouseEnterHandler) {
+            btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
+            btn._mouseEnterHandler = null;
+        }
+        
+        // 标记为处理中，但不禁用按钮（这样仍能接收鼠标事件）
+        btn._isProcessing = true;
+        
+        try {
+            await navigator.clipboard.writeText(text);
+            
+            // 成功反馈
+            const originalIcon = btnIcon.textContent;
+            const originalText = btnText.textContent;
+            
+            btnIcon.textContent = '✓';
+            btnText.textContent = '已复制';
+            btn.classList.add('success');
+            
+            // 恢复函数
+            const restore = () => {
+                btnIcon.textContent = originalIcon;
+                btnText.textContent = originalText;
+                btn.classList.remove('success');
+                btn._isProcessing = false;
+                btn._restoreTimeout = null;
+                if (btn._mouseEnterHandler) {
+                    btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
+                    btn._mouseEnterHandler = null;
+                }
+            };
+            
+            // 鼠标悬停时立即恢复
+            btn._mouseEnterHandler = () => {
+                if (btn._restoreTimeout) {
+                    clearTimeout(btn._restoreTimeout);
+                    btn._restoreTimeout = null;
+                }
+                restore();
+            };
+            btn.addEventListener('mouseenter', btn._mouseEnterHandler);
+            
+            // 1.2秒后恢复
+            btn._restoreTimeout = setTimeout(() => {
+                restore();
+            }, 1200);
+        } catch (err) {
+            console.error('[Gemini Export] Copy failed:', err);
+            // 失败反馈
+            const originalIcon = btnIcon.textContent;
+            const originalText = btnText.textContent;
+            
+            btnIcon.textContent = '✗';
+            btnText.textContent = '复制失败';
+            
+            // 恢复函数
+            const restore = () => {
+                btnIcon.textContent = originalIcon;
+                btnText.textContent = originalText;
+                btn._isProcessing = false;
+                btn._restoreTimeout = null;
+                if (btn._mouseEnterHandler) {
+                    btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
+                    btn._mouseEnterHandler = null;
+                }
+            };
+            
+            // 鼠标悬停时立即恢复
+            btn._mouseEnterHandler = () => {
+                if (btn._restoreTimeout) {
+                    clearTimeout(btn._restoreTimeout);
+                    btn._restoreTimeout = null;
+                }
+                restore();
+            };
+            btn.addEventListener('mouseenter', btn._mouseEnterHandler);
+            
+            // 1.2秒后恢复
+            btn._restoreTimeout = setTimeout(() => {
+                restore();
+            }, 1200);
+        }
     }
 
     function handleDownload() {
         const text = document.getElementById('gemini-md-preview').textContent;
         if (!text || text.startsWith("请勾选")) return;
-        const blob = new Blob([text], { type: 'text/markdown' });
-        const url = URL.createObjectURL(blob), a = document.createElement('a');
-        a.href = url; a.download = `Gemini_Export_${Date.now()}.md`; a.click(); URL.revokeObjectURL(url);
+        
+        const btn = document.getElementById('gemini-download');
+        const btnIcon = btn.querySelector('.btn-icon');
+        const btnText = btn.querySelector('.btn-text');
+        
+        // 如果正在处理中，直接返回
+        if (btn._isProcessing) return;
+        
+        // 如果已经有恢复定时器，清除它
+        if (btn._restoreTimeout) {
+            clearTimeout(btn._restoreTimeout);
+            btn._restoreTimeout = null;
+        }
+        
+        // 如果已经有鼠标进入事件处理器，清除它
+        if (btn._mouseEnterHandler) {
+            btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
+            btn._mouseEnterHandler = null;
+        }
+        
+        // 标记为处理中，但不禁用按钮（这样仍能接收鼠标事件）
+        btn._isProcessing = true;
+        
+        try {
+            const blob = new Blob([text], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Gemini_Export_${Date.now()}.md`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            // 成功反馈
+            const originalIcon = btnIcon.textContent;
+            const originalText = btnText.textContent;
+            
+            btnIcon.textContent = '✓';
+            btnText.textContent = '已下载';
+            btn.classList.add('success');
+            
+            // 恢复函数
+            const restore = () => {
+                btnIcon.textContent = originalIcon;
+                btnText.textContent = originalText;
+                btn.classList.remove('success');
+                btn._isProcessing = false;
+                btn._restoreTimeout = null;
+                if (btn._mouseEnterHandler) {
+                    btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
+                    btn._mouseEnterHandler = null;
+                }
+            };
+            
+            // 鼠标悬停时立即恢复
+            btn._mouseEnterHandler = () => {
+                if (btn._restoreTimeout) {
+                    clearTimeout(btn._restoreTimeout);
+                    btn._restoreTimeout = null;
+                }
+                restore();
+            };
+            btn.addEventListener('mouseenter', btn._mouseEnterHandler);
+            
+            // 1.2秒后恢复
+            btn._restoreTimeout = setTimeout(() => {
+                restore();
+            }, 1200);
+        } catch (err) {
+            console.error('[Gemini Export] Download failed:', err);
+            // 失败反馈
+            const originalIcon = btnIcon.textContent;
+            const originalText = btnText.textContent;
+            
+            btnIcon.textContent = '✗';
+            btnText.textContent = '下载失败';
+            
+            // 恢复函数
+            const restore = () => {
+                btnIcon.textContent = originalIcon;
+                btnText.textContent = originalText;
+                btn._isProcessing = false;
+                btn._restoreTimeout = null;
+                if (btn._mouseEnterHandler) {
+                    btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
+                    btn._mouseEnterHandler = null;
+                }
+            };
+            
+            // 鼠标悬停时立即恢复
+            btn._mouseEnterHandler = () => {
+                if (btn._restoreTimeout) {
+                    clearTimeout(btn._restoreTimeout);
+                    btn._restoreTimeout = null;
+                }
+                restore();
+            };
+            btn.addEventListener('mouseenter', btn._mouseEnterHandler);
+            
+            // 1.2秒后恢复
+            btn._restoreTimeout = setTimeout(() => {
+                restore();
+            }, 1200);
+        }
     }
 
     function init() {
