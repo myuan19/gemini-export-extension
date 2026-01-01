@@ -1,8 +1,6 @@
 为了帮助你进行更全面的解析测试，我生成了一段包含**极端缩进、混合语法、Windows 绝对路径、以及紧凑文字环绕**的示例。这段代码模拟了一个复杂的跨平台部署脚本。
 
-
 ---
-
 
 ### 综合解析测试：多协议部署脚本
 
@@ -15,43 +13,48 @@
 `C:\Program Files (x86)\Common Files\Test_Suite\config.ini`
 确认路径后，执行以下基础检查：
 
-    ```Python
-    import os
-    # 模拟 Windows 路径处理
-    def check_env():
-        base_path = r"C:\Users\Admin\AppData\Local\Temp"
-        print(f"Checking path: {base_path}")
-        return os.path.exists(base_path)
-    ```
+   ```python
+   import os
+   # 模拟 Windows 路径处理
+   def check_env():
+       base_path = r"C:\Users\Admin\AppData\Local\Temp"
+       print(f"Checking path: {base_path}")
+       return os.path.exists(base_path)
+   ```
 
-    *上述 Python 代码块之后紧跟此段斜体说明，用于测试块后文本识别。*
+
+
+   *上述 Python 代码块之后紧跟此段斜体说明，用于测试块后文本识别。*
 2. **多层级任务分发逻辑**
-    - **网络探测阶段**
+   - **网络探测阶段**
 在这一步，我们进入二级缩进，测试列表内嵌套的代码表现：
-    1. **内部 API 校验**
+      1. **内部 API 校验**
 发送一个简单的 GET 请求。注意代码块前的路径说明：
 配置文件位于 `D:\Deploy\Nodes\v2.4.0\server.conf`。
 
-            ```Bash
-            curl -X GET "https://api.internal.service/health" -H "Accept: application/json"
-            ```
+         ```bash
+         curl -X GET "https://api.internal.service/health" -H "Accept: application/json"
+         ```
 
-            此代码块前后均有紧凑的列表文字。
-    2. **本地持久化测试**
+
+
+         此代码块前后均有紧凑的列表文字。
+      2. **本地持久化测试**
 如果网络校验通过，将数据写入以下目录：
 `C:\Windows\System32\drivers\etc\hosts.backup`
 
-            ```JSON
-            {
-              "operation": "backup",
-              "status": "pending",
-              "timestamp": "2026-01-01T08:00:00Z"
-            }
-            ```
+         ```json
+         {
+           "operation": "backup",
+           "status": "pending",
+           "timestamp": "2026-01-01T08:00:00Z"
+         }
+         ```
 
-            *注意：JSON 格式中的双引号与 Windows 路径的反斜杠不应冲突。*
+
+
+         *注意：JSON 格式中的双引号与 Windows 路径的反斜杠不应冲突。*
 3. **异常处理表格**
-
 
 | **错误代码** | **匹配路径** | **优先级** |
 | --- | --- | --- |
@@ -62,18 +65,19 @@
 1. **底层驱动调用 (C++)**
 最后是一段带有深层逻辑的代码，用于测试复杂字符：
 
-    ```C++
-    #include <iostream>
-    int main() {
-        // 测试 Windows 路径字符串转义
-        const char* path = "C:\\Windows\\System32\\";
-        std::cout << "Target: " << path << std::endl;
-        return 0;
-    }
-    ```
+   ```c++
+   #include <iostream>
+   int main() {
+       // 测试 Windows 路径字符串转义
+       const char* path = "C:\\Windows\\System32\\";
+       std::cout << "Target: " << path << std::endl;
+       return 0;
+   }
+   ```
 
-    这段文字是整个测试文档的末尾，确保解析器能正确关闭所有标签。
 
+
+   这段文字是整个测试文档的末尾，确保解析器能正确关闭所有标签。
 
 ---
 
