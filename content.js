@@ -713,6 +713,20 @@
             }
 
             const pos = JSON.parse(saved);
+            const sidebarOpen = document.body.classList.contains('export-open');
+            
+            // 如果侧边栏展开，需要将保存的位置（未展开状态）转换为展开状态
+            if (sidebarOpen && pos.right !== undefined) {
+                if (pos.collapsed === 'collapsed-right') {
+                    // 如果小球贴合右边缘，在未展开状态下 right = 0
+                    // 转换为展开状态：right = SIDEBAR_WIDTH
+                    pos.right = CONFIG.SIDEBAR_WIDTH;
+                } else {
+                    // 其他情况：right 值需要减去侧边栏宽度
+                    // 因为保存的是相对于窗口的，需要转换为相对于可视区域的
+                    pos.right = Math.max(0, pos.right - CONFIG.SIDEBAR_WIDTH);
+                }
+            }
             
             if (pos.right !== undefined || pos.bottom !== undefined) {
                 if (pos.right !== undefined) {
@@ -763,6 +777,7 @@
         try {
             const pos = {};
             const style = trigger.style;
+            const sidebarOpen = document.body.classList.contains('export-open');
             
             const parseStyleValue = (value) => {
                 if (!value || value === 'auto' || value === '') return undefined;
@@ -782,6 +797,20 @@
             }
             
             const collapsedClass = CONFIG.COLLAPSED_CLASSES.find(cls => trigger.classList.contains(cls));
+            
+            // 如果侧边栏展开，需要将位置转换为"未展开状态"下的位置
+            if (sidebarOpen && pos.right !== undefined) {
+                if (collapsedClass === 'collapsed-right') {
+                    // 如果小球贴合右边缘，在展开状态下 right = SIDEBAR_WIDTH
+                    // 转换为未展开状态：right = 0
+                    pos.right = 0;
+                } else {
+                    // 其他情况：right 值需要加上侧边栏宽度
+                    // 因为展开时 right 是相对于可视区域的，需要转换为相对于窗口的
+                    pos.right = pos.right + CONFIG.SIDEBAR_WIDTH;
+                }
+            }
+            
             if (collapsedClass) {
                 pos.collapsed = collapsedClass;
             }
