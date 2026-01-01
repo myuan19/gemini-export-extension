@@ -3,7 +3,7 @@
   "name": "Gemini to Markdown",
   "version": "1.0.0",
   "description": "Export Google Gemini conversations to Markdown format with selective message export",
-  "author": "Your Name",
+  "author": "myuan",
   "permissions": [
     "activeTab",
     "storage",
