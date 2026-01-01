@@ -360,7 +360,8 @@
             .gemini-header-actions { display: flex; gap: 8px; }
             .gemini-btn-small { padding: 6px 12px; border-radius: 6px; border: 1px solid #dadce0; background: white; color: #202124; cursor: pointer; font-weight: 500; font-size: 12px; transition: 0.2s; }
             .gemini-btn-small:hover { background: #f1f3f4; border-color: #1a73e8; }
-            .gemini-preview { flex: 1; overflow-y: auto; padding: 20px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; background: #fff; color: #333; transition: background-color 0.3s, color 0.3s; }
+            .gemini-preview { flex: 1; overflow-y: auto; padding: 20px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; background: #fff; color: #333; transition: background-color 0.3s, color 0.3s; cursor: text; }
+            .gemini-preview:focus { background: #fafafa; }
             .gemini-footer { padding: 16px; border-top: 1px solid #e0e0e0; background: #f8f9fa; display: flex; gap: 12px; transition: background-color 0.3s, border-color 0.3s, color 0.3s; }
             .gemini-btn { 
                 flex: 1; 
@@ -511,6 +512,45 @@
         `;
     }
 
+    // 设置预览区域的 Ctrl+A 全选功能
+    function setupPreviewSelectAll() {
+        const preview = document.getElementById('gemini-md-preview');
+        if (!preview) return;
+
+        // 使预览区域可以聚焦
+        preview.setAttribute('tabindex', '0');
+        preview.style.outline = 'none';
+
+        // 添加键盘事件监听器
+        preview.addEventListener('keydown', (e) => {
+            // 检查是否按下了 Ctrl+A (Windows/Linux) 或 Cmd+A (Mac)
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // 选中预览区域中的所有文本
+                const selection = window.getSelection();
+                const range = document.createRange();
+                
+                // 查找实际的文本容器（pre 元素或预览区域本身）
+                const textContainer = document.getElementById('gemini-md-preview-pre') || preview;
+                
+                // 选中整个文本容器的内容
+                range.selectNodeContents(textContainer);
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+        });
+
+        // 添加点击事件，使预览区域可以聚焦
+        preview.addEventListener('click', (e) => {
+            // 如果点击的不是链接或其他交互元素，则聚焦预览区域
+            if (e.target === preview || e.target.closest('#gemini-md-preview-pre')) {
+                preview.focus();
+            }
+        });
+    }
+
     function setupSidebarEventHandlers(sidebar, trigger) {
         const toggleSidebar = () => {
             const isOpen = sidebar.classList.toggle('open');
@@ -616,6 +656,9 @@
         document.getElementById('invert-select-btn').onclick = handleInvertSelect;
         document.getElementById('clear-select-btn').onclick = handleClearSelect;
         document.getElementById('scroll-to-top-btn').onclick = scrollToTop;
+
+        // 为预览区域添加 Ctrl+A 全选功能
+        setupPreviewSelectAll();
 
         state.toggleSidebar = toggleSidebar;
     }
