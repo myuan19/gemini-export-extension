@@ -137,7 +137,8 @@
             .gemini-footer { padding: 16px; border-top: 1px solid #e0e0e0; display: flex; gap: 12px; background: #f8f9fa; }
             .gemini-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #dadce0; cursor: pointer; font-weight: 500; transition: 0.2s; }
             .gemini-btn-primary { background: #1a73e8; color: white; border: none; }
-            #export-cb-column { position: absolute; left: 0; top: 0; width: 60px; pointer-events: none; z-index: 2147483640; }
+            #export-cb-column { position: absolute; left: 0; top: 0; width: 60px; pointer-events: none; z-index: 2147483640; display: none; }
+            body.export-open #export-cb-column { display: block; }
             .cb-wrapper { position: absolute; left: 20px; pointer-events: auto; width: 20px; height: 20px; }
             .cb-input { width: 18px; height: 18px; cursor: pointer; accent-color: #1a73e8; }
             #export-trigger { position: fixed; bottom: 30px; right: 30px; z-index: 2147483645; padding: 12px 24px; background: #1a73e8; color: white; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.25); font-weight: 600; }
