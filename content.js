@@ -23,6 +23,8 @@
         sidebar: null,
         lastUrl: location.href,
         observer: null,
+        themeObserver: null,
+        currentTheme: 'light',
         dragState: {
             isDragging: false,
             hasMoved: false,
@@ -133,40 +135,239 @@
         }
     }
 
+    // --- 主题检测与更新 ---
+    function detectTheme() {
+        // 方法1: 检查 body 类名
+        if (document.body.classList.contains('dark-theme')) {
+            return 'dark';
+        }
+        if (document.body.classList.contains('light-theme')) {
+            return 'light';
+        }
+        
+        // 方法2: 检查实际背景色
+        try {
+            const computedStyle = window.getComputedStyle(document.body);
+            const bgColor = computedStyle.backgroundColor;
+            
+            // 将背景色转换为 RGB 值
+            const rgbMatch = bgColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+            if (rgbMatch) {
+                const r = parseInt(rgbMatch[1]);
+                const g = parseInt(rgbMatch[2]);
+                const b = parseInt(rgbMatch[3]);
+                // 计算亮度 (使用相对亮度公式)
+                const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                // 如果亮度小于 128，认为是深色主题
+                if (brightness < 128) {
+                    return 'dark';
+                }
+            }
+            
+            // 检查 CSS 变量
+            const surfaceColor = computedStyle.getPropertyValue('--gem-sys-color--surface') || 
+                               computedStyle.getPropertyValue('--mat-sys-surface');
+            if (surfaceColor) {
+                // 如果包含深色相关的颜色值
+                if (surfaceColor.includes('rgb(32, 33, 36)') || 
+                    surfaceColor.includes('#202124') ||
+                    surfaceColor.includes('rgb(45, 46, 48)')) {
+                    return 'dark';
+                }
+            }
+        } catch (e) {
+            console.warn('[Gemini Export] Theme detection error:', e);
+        }
+        
+        // 方法3: 检查 prefers-color-scheme（作为后备）
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (prefersDark) {
+            return 'dark';
+        }
+        
+        return 'light';
+    }
+
+    function getThemeColors(theme) {
+        if (theme === 'dark') {
+            return {
+                sidebarBg: '#202124',
+                headerBg: '#2d2e30',
+                footerBg: '#2d2e30',
+                previewBg: '#202124',
+                previewText: '#e8eaed',
+                headerText: '#e8eaed',
+                footerText: '#e8eaed',
+                border: '#3c4043',
+                btnBg: '#303134',
+                btnText: '#e8eaed',
+                btnBorder: '#3c4043',
+                btnHoverBg: '#3c4043',
+                btnPrimaryBg: '#8ab4f8',
+                btnPrimaryText: '#202124',
+                triggerBg: '#8ab4f8',
+                triggerText: '#202124',
+                shadow: 'rgba(0,0,0,0.5)'
+            };
+        } else {
+            return {
+                sidebarBg: '#ffffff',
+                headerBg: '#f8f9fa',
+                footerBg: '#f8f9fa',
+                previewBg: '#ffffff',
+                previewText: '#333333',
+                headerText: '#202124',
+                footerText: '#202124',
+                border: '#e0e0e0',
+                btnBg: '#ffffff',
+                btnText: '#202124',
+                btnBorder: '#dadce0',
+                btnHoverBg: '#f1f3f4',
+                btnPrimaryBg: '#1a73e8',
+                btnPrimaryText: '#ffffff',
+                triggerBg: '#1a73e8',
+                triggerText: '#ffffff',
+                shadow: 'rgba(0,0,0,0.25)'
+            };
+        }
+    }
+
+    function updateTheme() {
+        const newTheme = detectTheme();
+        // 如果主题没有变化且已初始化，则跳过
+        if (state.currentTheme && newTheme === state.currentTheme) return;
+        
+        state.currentTheme = newTheme;
+        const colors = getThemeColors(newTheme);
+        const sidebar = document.getElementById('gemini-export-sidebar');
+        const trigger = document.getElementById('export-trigger');
+        const style = document.getElementById('gemini-export-theme-style');
+        
+        if (style) {
+            style.textContent = `
+                #gemini-export-sidebar { 
+                    background: ${colors.sidebarBg} !important;
+                }
+                .gemini-header { 
+                    background: ${colors.headerBg} !important;
+                    border-bottom-color: ${colors.border} !important;
+                }
+                .gemini-header span { 
+                    color: ${colors.headerText} !important;
+                }
+                #close-gemini-export { 
+                    color: ${colors.headerText} !important;
+                }
+                .gemini-preview { 
+                    background: ${colors.previewBg} !important;
+                    color: ${colors.previewText} !important;
+                }
+                .gemini-footer { 
+                    background: ${colors.footerBg} !important;
+                    border-top-color: ${colors.border} !important;
+                }
+                .gemini-btn-small { 
+                    background: ${colors.btnBg} !important;
+                    color: ${colors.btnText} !important;
+                    border-color: ${colors.btnBorder} !important;
+                }
+                .gemini-btn-small:hover { 
+                    background: ${colors.btnHoverBg} !important;
+                    border-color: ${colors.btnPrimaryBg} !important;
+                }
+                .gemini-btn { 
+                    background: ${colors.btnBg} !important;
+                    color: ${colors.btnText} !important;
+                    border-color: ${colors.btnBorder} !important;
+                }
+                .gemini-btn:hover { 
+                    background: ${colors.btnHoverBg} !important;
+                }
+                .gemini-btn-primary { 
+                    background: ${colors.btnPrimaryBg} !important;
+                    color: ${colors.btnPrimaryText} !important;
+                    border: none !important;
+                }
+                .gemini-btn-primary:hover { 
+                    opacity: 0.9;
+                }
+                #export-trigger { 
+                    background: ${colors.triggerBg} !important;
+                    color: ${colors.triggerText} !important;
+                    box-shadow: 0 4px 12px ${colors.shadow}, 0 2px 4px rgba(0,0,0,0.1) !important;
+                }
+                #export-trigger:not(.collapsed-left):not(.collapsed-right):not(.collapsed-top):not(.collapsed-bottom):hover {
+                    box-shadow: 0 6px 16px ${colors.shadow}, 0 2px 4px rgba(0,0,0,0.15) !important;
+                }
+                .cb-input { 
+                    accent-color: ${colors.btnPrimaryBg} !important;
+                }
+            `;
+        }
+    }
+
+    function setupThemeObserver() {
+        if (state.themeObserver) {
+            state.themeObserver.disconnect();
+        }
+        
+        // 监听 body 类名变化
+        state.themeObserver = new MutationObserver(() => {
+            updateTheme();
+        });
+        
+        state.themeObserver.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['class']
+        });
+        
+        // 监听系统主题变化
+        if (window.matchMedia) {
+            const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+            mediaQuery.addEventListener('change', updateTheme);
+        }
+        
+        // 初始更新
+        updateTheme();
+    }
+
     // --- UI 注入 ---
     function injectUI() {
         if (document.getElementById('gemini-export-sidebar')) return;
+        
+        // 创建主题样式元素
+        const themeStyle = document.createElement('style');
+        themeStyle.id = 'gemini-export-theme-style';
+        document.head.appendChild(themeStyle);
+        
         const style = document.createElement('style');
         style.textContent = `
-            #gemini-export-sidebar { position: fixed; top: 0; right: 0; width: ${CONFIG.SIDEBAR_WIDTH}px; height: 100vh; background: #fff; box-shadow: -2px 0 10px rgba(0,0,0,0.1); z-index: 2147483647; transform: translateX(100%); transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; font-family: -apple-system, sans-serif; }
+            #gemini-export-sidebar { position: fixed; top: 0; right: 0; width: ${CONFIG.SIDEBAR_WIDTH}px; height: 100vh; box-shadow: -2px 0 10px rgba(0,0,0,0.1); z-index: 2147483647; transform: translateX(100%); transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; font-family: -apple-system, sans-serif; }
             #gemini-export-sidebar.open { transform: translateX(0); }
             body.export-open { margin-right: ${CONFIG.SIDEBAR_WIDTH}px !important; transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
             body.export-open > *:not(#gemini-export-sidebar):not(#export-trigger) { 
                 transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             }
-            .gemini-header { padding: 16px; border-bottom: 1px solid #e0e0e0; background: #f8f9fa; display: flex; flex-direction: column; gap: 12px; }
+            .gemini-header { padding: 16px; border-bottom: 1px solid; display: flex; flex-direction: column; gap: 12px; transition: background-color 0.3s, border-color 0.3s, color 0.3s; }
             .gemini-header-top { display: flex; justify-content: space-between; align-items: center; }
             .gemini-header-actions { display: flex; gap: 8px; }
-            .gemini-btn-small { padding: 6px 12px; border-radius: 6px; border: 1px solid #dadce0; cursor: pointer; font-weight: 500; font-size: 12px; transition: 0.2s; background: white; color: #202124; }
-            .gemini-btn-small:hover { background: #f1f3f4; border-color: #1a73e8; }
-            .gemini-preview { flex: 1; overflow-y: auto; padding: 20px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; background: #fff; color: #333; }
-            .gemini-footer { padding: 16px; border-top: 1px solid #e0e0e0; display: flex; gap: 12px; background: #f8f9fa; }
-            .gemini-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #dadce0; cursor: pointer; font-weight: 500; transition: 0.2s; }
-            .gemini-btn-primary { background: #1a73e8; color: white; border: none; }
+            .gemini-btn-small { padding: 6px 12px; border-radius: 6px; border: 1px solid; cursor: pointer; font-weight: 500; font-size: 12px; transition: 0.2s; }
+            .gemini-btn-small:hover { }
+            .gemini-preview { flex: 1; overflow-y: auto; padding: 20px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; transition: background-color 0.3s, color 0.3s; }
+            .gemini-footer { padding: 16px; border-top: 1px solid; display: flex; gap: 12px; transition: background-color 0.3s, border-color 0.3s, color 0.3s; }
+            .gemini-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid; cursor: pointer; font-weight: 500; transition: 0.2s; }
+            .gemini-btn-primary { border: none; }
             #export-cb-column { position: absolute; left: 0; top: 0; width: 60px; pointer-events: none; z-index: 2147483640; display: none; }
             body.export-open #export-cb-column { display: block; }
             .cb-wrapper { position: absolute; left: 20px; pointer-events: auto; width: 20px; height: 20px; }
-            .cb-input { width: 18px; height: 18px; cursor: pointer; accent-color: #1a73e8; }
+            .cb-input { width: 18px; height: 18px; cursor: pointer; }
             #export-trigger { 
                 position: fixed; 
                 width: 44px; 
                 height: 44px; 
                 border-radius: 50%; 
-                background: #1a73e8; 
-                color: white; 
                 border: none; 
                 cursor: move; 
-                box-shadow: 0 4px 12px rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.1); 
                 font-weight: 600; 
                 font-size: 10px;
                 z-index: 2147483645;
@@ -174,7 +375,7 @@
                 align-items: center;
                 justify-content: center;
                 user-select: none;
-                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s, border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s, border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s, color 0.3s;
                 padding: 0;
             }
             #export-trigger:active {
@@ -223,7 +424,6 @@
             }
             #export-trigger:not(.collapsed-left):not(.collapsed-right):not(.collapsed-top):not(.collapsed-bottom):hover {
                 transform: scale(1.1);
-                box-shadow: 0 6px 16px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.15);
             }
             body.export-open infinite-scroller.chat-history { padding-left: 60px !important; }
         `;
@@ -355,6 +555,9 @@
         
         // 将切换函数暴露给拖动处理函数使用
         state.toggleSidebar = toggleSidebar;
+        
+        // 设置主题监听
+        setupThemeObserver();
     }
 
     // 加载悬浮球位置
@@ -948,6 +1151,9 @@
             state.observer = new MutationObserver(() => { if (state.sidebar?.classList.contains('open')) syncCheckboxes(); });
             state.observer.observe(history, { childList: true, subtree: true });
         }
+        
+        // 确保主题已更新
+        setTimeout(updateTheme, 100);
     }
 
     setInterval(() => {
