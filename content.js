@@ -241,6 +241,7 @@
                     <button class="gemini-btn-small" id="select-all-btn">全选</button>
                     <button class="gemini-btn-small" id="invert-select-btn">反选</button>
                     <button class="gemini-btn-small" id="clear-select-btn">清空</button>
+                    <button class="gemini-btn-small" id="scroll-to-top-btn" title="滚动到顶部">⬆️</button>
                 </div>
             </div>
             <div class="gemini-preview" id="gemini-md-preview">请在左侧勾选消息进行导出...</div>
@@ -322,12 +323,23 @@
             if (isOpen) syncCheckboxes();
         };
         
+        // 滚动到顶部功能
+        function scrollToTop() {
+            const history = document.querySelector(CONFIG.SELECTORS.history);
+            if (history) {
+                history.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+        
         document.getElementById('close-gemini-export').onclick = toggleSidebar;
         document.getElementById('gemini-copy').onclick = handleCopy;
         document.getElementById('gemini-download').onclick = handleDownload;
         document.getElementById('select-all-btn').onclick = handleSelectAll;
         document.getElementById('invert-select-btn').onclick = handleInvertSelect;
         document.getElementById('clear-select-btn').onclick = handleClearSelect;
+        document.getElementById('scroll-to-top-btn').onclick = scrollToTop;
         
         // 将切换函数暴露给拖动处理函数使用
         state.toggleSidebar = toggleSidebar;
