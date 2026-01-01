@@ -132,7 +132,11 @@
         style.textContent = `
             #gemini-export-sidebar { position: fixed; top: 0; right: 0; width: ${CONFIG.SIDEBAR_WIDTH}px; height: 100vh; background: #fff; box-shadow: -2px 0 10px rgba(0,0,0,0.1); z-index: 2147483647; transform: translateX(100%); transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; font-family: -apple-system, sans-serif; }
             #gemini-export-sidebar.open { transform: translateX(0); }
-            .gemini-header { padding: 16px; border-bottom: 1px solid #e0e0e0; background: #f8f9fa; display: flex; justify-content: space-between; align-items: center; }
+            .gemini-header { padding: 16px; border-bottom: 1px solid #e0e0e0; background: #f8f9fa; display: flex; flex-direction: column; gap: 12px; }
+            .gemini-header-top { display: flex; justify-content: space-between; align-items: center; }
+            .gemini-header-actions { display: flex; gap: 8px; }
+            .gemini-btn-small { padding: 6px 12px; border-radius: 6px; border: 1px solid #dadce0; cursor: pointer; font-weight: 500; font-size: 12px; transition: 0.2s; background: white; color: #202124; }
+            .gemini-btn-small:hover { background: #f1f3f4; border-color: #1a73e8; }
             .gemini-preview { flex: 1; overflow-y: auto; padding: 20px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; background: #fff; color: #333; }
             .gemini-footer { padding: 16px; border-top: 1px solid #e0e0e0; display: flex; gap: 12px; background: #f8f9fa; }
             .gemini-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #dadce0; cursor: pointer; font-weight: 500; transition: 0.2s; }
@@ -149,7 +153,17 @@
         const sb = document.createElement('div');
         sb.id = 'gemini-export-sidebar';
         sb.innerHTML = `
-            <div class="gemini-header"><span style="font-weight:bold">Gemini to Markdown</span><button id="close-gemini-export" style="background:none; border:none; cursor:pointer; font-size:18px;">✕</button></div>
+            <div class="gemini-header">
+                <div class="gemini-header-top">
+                    <span style="font-weight:bold">Gemini to Markdown</span>
+                    <button id="close-gemini-export" style="background:none; border:none; cursor:pointer; font-size:18px;">✕</button>
+                </div>
+                <div class="gemini-header-actions">
+                    <button class="gemini-btn-small" id="select-all-btn">全选</button>
+                    <button class="gemini-btn-small" id="invert-select-btn">反选</button>
+                    <button class="gemini-btn-small" id="clear-select-btn">清空</button>
+                </div>
+            </div>
             <div class="gemini-preview" id="gemini-md-preview">请在左侧勾选消息进行导出...</div>
             <div class="gemini-footer">
                 <button class="gemini-btn" id="gemini-download">下载 Markdown</button>
@@ -172,6 +186,85 @@
         document.getElementById('close-gemini-export').onclick = () => trigger.click();
         document.getElementById('gemini-copy').onclick = handleCopy;
         document.getElementById('gemini-download').onclick = handleDownload;
+        document.getElementById('select-all-btn').onclick = handleSelectAll;
+        document.getElementById('invert-select-btn').onclick = handleInvertSelect;
+        document.getElementById('clear-select-btn').onclick = handleClearSelect;
+    }
+
+    // 全选功能
+    function handleSelectAll() {
+        const history = document.querySelector(CONFIG.SELECTORS.history);
+        if (!history) return;
+        
+        // 确保复选框已同步
+        syncCheckboxes();
+        
+        const messages = history.querySelectorAll(CONFIG.SELECTORS.messages);
+        const column = document.getElementById('export-cb-column');
+        if (!column) return;
+        
+        messages.forEach((msg, idx) => {
+            state.selectedMessages.add(idx);
+            const wrapper = column.querySelector(`.cb-wrapper[data-idx="${idx}"]`);
+            if (wrapper) {
+                const checkbox = wrapper.querySelector('.cb-input');
+                if (checkbox) checkbox.checked = true;
+            }
+        });
+        updatePreview();
+    }
+
+    // 反选功能
+    function handleInvertSelect() {
+        const history = document.querySelector(CONFIG.SELECTORS.history);
+        if (!history) return;
+        
+        // 确保复选框已同步
+        syncCheckboxes();
+        
+        const messages = history.querySelectorAll(CONFIG.SELECTORS.messages);
+        const column = document.getElementById('export-cb-column');
+        if (!column) return;
+        
+        messages.forEach((msg, idx) => {
+            const wrapper = column.querySelector(`.cb-wrapper[data-idx="${idx}"]`);
+            if (wrapper) {
+                const checkbox = wrapper.querySelector('.cb-input');
+                if (checkbox) {
+                    if (state.selectedMessages.has(idx)) {
+                        state.selectedMessages.delete(idx);
+                        checkbox.checked = false;
+                    } else {
+                        state.selectedMessages.add(idx);
+                        checkbox.checked = true;
+                    }
+                }
+            }
+        });
+        updatePreview();
+    }
+
+    // 清空功能
+    function handleClearSelect() {
+        const history = document.querySelector(CONFIG.SELECTORS.history);
+        if (!history) return;
+        
+        // 确保复选框已同步
+        syncCheckboxes();
+        
+        const column = document.getElementById('export-cb-column');
+        if (!column) return;
+        
+        // 清空所有选中的消息
+        state.selectedMessages.clear();
+        
+        // 取消所有复选框的选中状态
+        const checkboxes = column.querySelectorAll('.cb-input');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        
+        updatePreview();
     }
 
     function syncCheckboxes() {
