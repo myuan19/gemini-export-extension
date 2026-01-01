@@ -182,7 +182,7 @@
             }
             #export-trigger.dragging {
                 cursor: grabbing;
-                transition: none;
+                transition: border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             }
             /* 左侧贴合：左侧方形，右侧圆形 */
             #export-trigger.collapsed-left {
@@ -289,6 +289,11 @@
             });
             
             // 调整小球位置，确保它跟随页面内容移动
+            // 先启用位置过渡，让小球平滑移动（与侧边栏展开速度一致）
+            if (!trigger.classList.contains('dragging')) {
+                trigger.style.transition = 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), right 0.3s cubic-bezier(0.4, 0, 0.2, 1), top 0.3s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+            }
+            
             setTimeout(() => {
                 const rect = trigger.getBoundingClientRect();
                 const isCollapsedRight = trigger.classList.contains('collapsed-right');
@@ -318,7 +323,14 @@
                         trigger.classList.add('collapsed-right');
                     }
                 }
-            }, 50);
+                
+                // 过渡完成后，恢复正常的 transition（如果不在拖动状态）
+                setTimeout(() => {
+                    if (!trigger.classList.contains('dragging')) {
+                        trigger.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s, border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+                    }
+                }, 300);
+            }, 10);
             
             if (isOpen) syncCheckboxes();
         };
@@ -479,7 +491,7 @@
     // 设置拖动和边缘检测
     function setupDragAndDrop(trigger, sidebar) {
         const EDGE_THRESHOLD = 50; // 边缘检测阈值（像素）
-        const COLLAPSE_THRESHOLD = 20; // 完全缩进的阈值
+        const COLLAPSE_THRESHOLD = 1; // 完全缩进的阈值（小球边缘与屏幕边缘相切的容差，单位：像素）
         const DRAG_THRESHOLD = 5; // 拖动阈值（像素），超过此距离才认为是拖动
         let clickHandled = false;
 
@@ -538,7 +550,8 @@
                 state.dragState.hasMoved = true;
                 state.dragState.isDragging = true;
                 trigger.classList.add('dragging');
-                trigger.style.transition = 'none';
+                // 只禁用位置相关的过渡，保留 border-radius 的过渡以实现平滑变化
+                trigger.style.transition = 'border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
             }
             
             if (!state.dragState.isDragging) return;
@@ -576,25 +589,40 @@
             // 找到最近边缘
             const minDistance = Math.min(distanceToLeft, distanceToRight, distanceToTop, distanceToBottom);
             
-            if (minDistance < EDGE_THRESHOLD) {
-                if (distanceToLeft === minDistance && distanceToLeft < COLLAPSE_THRESHOLD) {
+            // 只有在真正缩进状态（距离 < COLLAPSE_THRESHOLD）时才显示方圆样式
+            let isCollapsed = false;
+            if (minDistance < COLLAPSE_THRESHOLD) {
+                if (distanceToLeft === minDistance) {
                     trigger.classList.add('collapsed-left');
                     trigger.style.left = '0';
                     trigger.style.right = 'auto';
-                } else if (distanceToRight === minDistance && distanceToRight < COLLAPSE_THRESHOLD) {
+                    trigger.style.borderRadius = '0 50% 50% 0';
+                    isCollapsed = true;
+                } else if (distanceToRight === minDistance) {
                     trigger.classList.add('collapsed-right');
                     // 如果侧边栏打开，右侧边缘应该是可视区域的右边缘
                     trigger.style.right = sidebarOpen ? `${CONFIG.SIDEBAR_WIDTH}px` : '0';
                     trigger.style.left = 'auto';
-                } else if (distanceToTop === minDistance && distanceToTop < COLLAPSE_THRESHOLD) {
+                    trigger.style.borderRadius = '50% 0 0 50%';
+                    isCollapsed = true;
+                } else if (distanceToTop === minDistance) {
                     trigger.classList.add('collapsed-top');
                     trigger.style.top = '0';
                     trigger.style.bottom = 'auto';
-                } else if (distanceToBottom === minDistance && distanceToBottom < COLLAPSE_THRESHOLD) {
+                    trigger.style.borderRadius = '0 0 50% 50%';
+                    isCollapsed = true;
+                } else if (distanceToBottom === minDistance) {
                     trigger.classList.add('collapsed-bottom');
                     trigger.style.bottom = '0';
                     trigger.style.top = 'auto';
+                    trigger.style.borderRadius = '50% 50% 0 0';
+                    isCollapsed = true;
                 }
+            }
+            
+            // 如果不在缩进状态，恢复为圆形
+            if (!isCollapsed) {
+                trigger.style.borderRadius = '50%';
             }
         });
 
@@ -652,7 +680,8 @@
                 state.dragState.hasMoved = true;
                 state.dragState.isDragging = true;
                 trigger.classList.add('dragging');
-                trigger.style.transition = 'none';
+                // 只禁用位置相关的过渡，保留 border-radius 的过渡以实现平滑变化
+                trigger.style.transition = 'border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
             }
             
             if (!state.dragState.isDragging) return;
@@ -687,25 +716,40 @@
             
             const minDistance = Math.min(distanceToLeft, distanceToRight, distanceToTop, distanceToBottom);
             
-            if (minDistance < EDGE_THRESHOLD) {
-                if (distanceToLeft === minDistance && distanceToLeft < COLLAPSE_THRESHOLD) {
+            // 只有在真正缩进状态（距离 < COLLAPSE_THRESHOLD）时才显示方圆样式
+            let isCollapsed = false;
+            if (minDistance < COLLAPSE_THRESHOLD) {
+                if (distanceToLeft === minDistance) {
                     trigger.classList.add('collapsed-left');
                     trigger.style.left = '0';
                     trigger.style.right = 'auto';
-                } else if (distanceToRight === minDistance && distanceToRight < COLLAPSE_THRESHOLD) {
+                    trigger.style.borderRadius = '0 50% 50% 0';
+                    isCollapsed = true;
+                } else if (distanceToRight === minDistance) {
                     trigger.classList.add('collapsed-right');
                     // 如果侧边栏打开，右侧边缘应该是可视区域的右边缘
                     trigger.style.right = sidebarOpen ? `${CONFIG.SIDEBAR_WIDTH}px` : '0';
                     trigger.style.left = 'auto';
-                } else if (distanceToTop === minDistance && distanceToTop < COLLAPSE_THRESHOLD) {
+                    trigger.style.borderRadius = '50% 0 0 50%';
+                    isCollapsed = true;
+                } else if (distanceToTop === minDistance) {
                     trigger.classList.add('collapsed-top');
                     trigger.style.top = '0';
                     trigger.style.bottom = 'auto';
-                } else if (distanceToBottom === minDistance && distanceToBottom < COLLAPSE_THRESHOLD) {
+                    trigger.style.borderRadius = '0 0 50% 50%';
+                    isCollapsed = true;
+                } else if (distanceToBottom === minDistance) {
                     trigger.classList.add('collapsed-bottom');
                     trigger.style.bottom = '0';
                     trigger.style.top = 'auto';
+                    trigger.style.borderRadius = '50% 50% 0 0';
+                    isCollapsed = true;
                 }
+            }
+            
+            // 如果不在缩进状态，恢复为圆形
+            if (!isCollapsed) {
+                trigger.style.borderRadius = '50%';
             }
             
             e.preventDefault();
