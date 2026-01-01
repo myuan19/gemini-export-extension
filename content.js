@@ -1,4 +1,3 @@
-
 /**
  * Gemini to Markdown - 逻辑全保留优化版（代码块内部换行修复）
  * 功能：深度解析 DOM 结构，完美还原 Markdown 格式
@@ -53,9 +52,7 @@
             startX: undefined,
             startY: undefined,
             startLeft: 0,
-            startTop: 0,
-            lastBallLeft: undefined,
-            lastBallTop: undefined
+            startTop: 0
         }
     };
 
@@ -425,6 +422,21 @@
         };
     }
 
+    // --- 辅助函数：导出按钮设置 ---
+    function setupExportButton(buttonId) {
+        const btn = document.getElementById(buttonId);
+        if (!btn) return null;
+        const btnIcon = btn.querySelector('.btn-icon');
+        const btnText = btn.querySelector('.btn-text');
+        const manager = createButtonStateManager(btn, btnIcon, btnText);
+        
+        if (manager.isProcessing()) return null;
+        manager.cleanup();
+        manager.setProcessing(true);
+        
+        return manager;
+    }
+
     // --- UI 注入 ---
     function createStyles() {
         const style = document.createElement('style');
@@ -703,6 +715,20 @@
     }
 
     // --- 位置管理 ---
+    // 辅助函数：位置转换逻辑
+    function convertPositionForSidebar(pos, sidebarOpen, isLoad) {
+        if (sidebarOpen && pos.right !== undefined) {
+            if (pos.collapsed === 'collapsed-right') {
+                pos.right = isLoad ? CONFIG.SIDEBAR_WIDTH : 0;
+            } else {
+                pos.right = isLoad 
+                    ? Math.max(0, pos.right - CONFIG.SIDEBAR_WIDTH)
+                    : pos.right + CONFIG.SIDEBAR_WIDTH;
+            }
+        }
+        return pos;
+    }
+
     function loadTriggerPosition(trigger) {
         try {
             const saved = localStorage.getItem('gemini-export-trigger-position');
@@ -715,18 +741,8 @@
             const pos = JSON.parse(saved);
             const sidebarOpen = document.body.classList.contains('export-open');
             
-            // 如果侧边栏展开，需要将保存的位置（未展开状态）转换为展开状态
-            if (sidebarOpen && pos.right !== undefined) {
-                if (pos.collapsed === 'collapsed-right') {
-                    // 如果小球贴合右边缘，在未展开状态下 right = 0
-                    // 转换为展开状态：right = SIDEBAR_WIDTH
-                    pos.right = CONFIG.SIDEBAR_WIDTH;
-                } else {
-                    // 其他情况：right 值需要减去侧边栏宽度
-                    // 因为保存的是相对于窗口的，需要转换为相对于可视区域的
-                    pos.right = Math.max(0, pos.right - CONFIG.SIDEBAR_WIDTH);
-                }
-            }
+            // 使用公共函数转换位置
+            convertPositionForSidebar(pos, sidebarOpen, true);
             
             if (pos.right !== undefined || pos.bottom !== undefined) {
                 if (pos.right !== undefined) {
@@ -797,23 +813,12 @@
             }
             
             const collapsedClass = CONFIG.COLLAPSED_CLASSES.find(cls => trigger.classList.contains(cls));
-            
-            // 如果侧边栏展开，需要将位置转换为"未展开状态"下的位置
-            if (sidebarOpen && pos.right !== undefined) {
-                if (collapsedClass === 'collapsed-right') {
-                    // 如果小球贴合右边缘，在展开状态下 right = SIDEBAR_WIDTH
-                    // 转换为未展开状态：right = 0
-                    pos.right = 0;
-                } else {
-                    // 其他情况：right 值需要加上侧边栏宽度
-                    // 因为展开时 right 是相对于可视区域的，需要转换为相对于窗口的
-                    pos.right = pos.right + CONFIG.SIDEBAR_WIDTH;
-                }
-            }
-            
             if (collapsedClass) {
                 pos.collapsed = collapsedClass;
             }
+            
+            // 使用公共函数转换位置
+            convertPositionForSidebar(pos, sidebarOpen, false);
             
             localStorage.setItem('gemini-export-trigger-position', JSON.stringify(pos));
         } catch (e) {
@@ -834,9 +839,6 @@
         const rect = trigger.getBoundingClientRect();
         state.dragState.startLeft = rect.left;
         state.dragState.startTop = rect.top;
-        // 初始化球的位置记录
-        state.dragState.lastBallLeft = rect.left;
-        state.dragState.lastBallTop = rect.top;
     }
 
     function handleDragMove(e, trigger, isTouch = false) {
@@ -861,7 +863,6 @@
         const visibleWidth = sidebarOpen ? window.innerWidth - CONFIG.SIDEBAR_WIDTH : window.innerWidth;
         const visibleHeight = window.innerHeight;
         
-        // 先计算球应该移动到的位置（基于鼠标位置）
         let newLeft = state.dragState.startLeft + deltaX;
         let newTop = state.dragState.startTop + deltaY;
         
@@ -871,59 +872,40 @@
         newLeft = Math.max(0, Math.min(newLeft, maxLeft));
         newTop = Math.max(0, Math.min(newTop, maxTop));
         
-        // 检查当前是否已经贴合边缘
         const isCurrentlyCollapsed = CONFIG.COLLAPSED_CLASSES.some(cls => trigger.classList.contains(cls));
         const currentCollapsedClass = CONFIG.COLLAPSED_CLASSES.find(cls => trigger.classList.contains(cls));
         
-        // 如果已经贴合边缘，检查鼠标移动方向来判断是否应该释放贴合状态
         if (isCurrentlyCollapsed) {
-            // 使用鼠标移动方向（deltaX/deltaY）来判断，而不是球的位置变化
-            // 因为球贴合边缘后位置被限制，无法通过位置变化判断
             let shouldReleaseCollapse = false;
             
             if (currentCollapsedClass === 'collapsed-left') {
-                // 如果鼠标向右移动（deltaX > 0，远离左边缘），释放贴合状态
                 shouldReleaseCollapse = deltaX > CONFIG.DRAG.DRAG_THRESHOLD;
             } else if (currentCollapsedClass === 'collapsed-right') {
-                // 如果鼠标向左移动（deltaX < 0，远离右边缘），释放贴合状态
                 shouldReleaseCollapse = deltaX < -CONFIG.DRAG.DRAG_THRESHOLD;
             } else if (currentCollapsedClass === 'collapsed-top') {
-                // 如果鼠标向下移动（deltaY > 0，远离上边缘），释放贴合状态
                 shouldReleaseCollapse = deltaY > CONFIG.DRAG.DRAG_THRESHOLD;
             } else if (currentCollapsedClass === 'collapsed-bottom') {
-                // 如果鼠标向上移动（deltaY < 0，远离下边缘），释放贴合状态
                 shouldReleaseCollapse = deltaY < -CONFIG.DRAG.DRAG_THRESHOLD;
             }
             
-            // 如果应该释放贴合状态
             if (shouldReleaseCollapse) {
-                // 释放贴合状态，让球跟随鼠标移动
                 trigger.classList.remove(...CONFIG.COLLAPSED_CLASSES);
                 trigger.style.right = 'auto';
                 trigger.style.bottom = 'auto';
                 trigger.style.left = newLeft + 'px';
                 trigger.style.top = newTop + 'px';
                 
-                // 更新起始位置为当前实际位置
                 const rectAfter = trigger.getBoundingClientRect();
                 state.dragState.startLeft = rectAfter.left;
                 state.dragState.startTop = rectAfter.top;
-                // 更新起始鼠标位置，避免位置跳跃
                 state.dragState.startX = point.clientX;
                 state.dragState.startY = point.clientY;
-                // 重置球的位置记录
-                state.dragState.lastBallLeft = undefined;
-                state.dragState.lastBallTop = undefined;
             } else {
-                // 保持贴合状态，球不移动（但记录鼠标位置变化，用于下次判断）
-                // 更新起始鼠标位置，但不更新球的位置
                 state.dragState.startX = point.clientX;
                 state.dragState.startY = point.clientY;
-                // 不更新 startLeft/startTop，保持贴合状态
-                return; // 保持贴合状态，不执行后续的边缘检测
+                return;
             }
         } else {
-            // 未贴合边缘，正常移动球
             trigger.classList.remove(...CONFIG.COLLAPSED_CLASSES);
             trigger.style.right = 'auto';
             trigger.style.bottom = 'auto';
@@ -931,7 +913,6 @@
             trigger.style.top = newTop + 'px';
         }
         
-        // 重新获取位置进行边缘检测
         const newRect = trigger.getBoundingClientRect();
         const distances = {
             left: newRect.left,
@@ -976,16 +957,11 @@
                 edgeActions[nearestEdge]();
                 isCollapsed = true;
                 
-                // 更新起始位置为贴合后的位置
                 const collapsedRect = trigger.getBoundingClientRect();
                 state.dragState.startLeft = collapsedRect.left;
                 state.dragState.startTop = collapsedRect.top;
-                // 更新鼠标位置，确保下次判断时 deltaX/deltaY 是基于正确的起始位置
                 state.dragState.startX = point.clientX;
                 state.dragState.startY = point.clientY;
-                // 重置球的位置记录
-                state.dragState.lastBallLeft = undefined;
-                state.dragState.lastBallTop = undefined;
             }
         }
         
@@ -1009,9 +985,6 @@
         
         state.dragState.startX = undefined;
         state.dragState.startY = undefined;
-        // 重置球的位置记录
-        state.dragState.lastBallLeft = undefined;
-        state.dragState.lastBallTop = undefined;
         
         if (wasDragging || hadMoved) {
             setTimeout(() => {
@@ -1081,15 +1054,22 @@
         return column;
     }
 
-    function handleSelectAll() {
+    // 辅助函数：获取消息和列
+    function getMessagesAndColumn() {
         const history = document.querySelector(CONFIG.SELECTORS.history);
-        if (!history) return;
-        
+        if (!history) return null;
         syncCheckboxes();
         const messages = history.querySelectorAll(CONFIG.SELECTORS.messages);
         const column = getCheckboxColumn();
-        if (!column) return;
+        if (!column) return null;
+        return { history, messages, column };
+    }
+
+    function handleSelectAll() {
+        const data = getMessagesAndColumn();
+        if (!data) return;
         
+        const { messages, column } = data;
         messages.forEach((msg, idx) => {
             state.selectedMessages.add(idx);
             const wrapper = column.querySelector(`.cb-wrapper[data-idx="${idx}"]`);
@@ -1100,14 +1080,10 @@
     }
 
     function handleInvertSelect() {
-        const history = document.querySelector(CONFIG.SELECTORS.history);
-        if (!history) return;
+        const data = getMessagesAndColumn();
+        if (!data) return;
         
-        syncCheckboxes();
-        const messages = history.querySelectorAll(CONFIG.SELECTORS.messages);
-        const column = getCheckboxColumn();
-        if (!column) return;
-        
+        const { messages, column } = data;
         messages.forEach((msg, idx) => {
             const wrapper = column.querySelector(`.cb-wrapper[data-idx="${idx}"]`);
             const checkbox = wrapper?.querySelector('.cb-input');
@@ -1125,13 +1101,10 @@
     }
 
     function handleClearSelect() {
-        const history = document.querySelector(CONFIG.SELECTORS.history);
-        if (!history) return;
+        const data = getMessagesAndColumn();
+        if (!data) return;
         
-        syncCheckboxes();
-        const column = getCheckboxColumn();
-        if (!column) return;
-        
+        const { column } = data;
         state.selectedMessages.clear();
         column.querySelectorAll('.cb-input').forEach(checkbox => {
             checkbox.checked = false;
@@ -1225,14 +1198,8 @@
         const text = document.getElementById('gemini-md-preview').textContent;
         if (!text || text.startsWith("请勾选")) return;
         
-        const btn = document.getElementById('gemini-copy');
-        const btnIcon = btn.querySelector('.btn-icon');
-        const btnText = btn.querySelector('.btn-text');
-        const manager = createButtonStateManager(btn, btnIcon, btnText);
-        
-        if (manager.isProcessing()) return;
-        manager.cleanup();
-        manager.setProcessing(true);
+        const manager = setupExportButton('gemini-copy');
+        if (!manager) return;
         
         try {
             await navigator.clipboard.writeText(text);
@@ -1247,14 +1214,8 @@
         const text = document.getElementById('gemini-md-preview').textContent;
         if (!text || text.startsWith("请勾选")) return;
         
-        const btn = document.getElementById('gemini-download');
-        const btnIcon = btn.querySelector('.btn-icon');
-        const btnText = btn.querySelector('.btn-text');
-        const manager = createButtonStateManager(btn, btnIcon, btnText);
-        
-        if (manager.isProcessing()) return;
-        manager.cleanup();
-        manager.setProcessing(true);
+        const manager = setupExportButton('gemini-download');
+        if (!manager) return;
         
         try {
             const blob = new Blob([text], { type: 'text/markdown' });
