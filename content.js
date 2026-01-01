@@ -1,3 +1,4 @@
+
 /**
  * Gemini to Markdown - 逻辑全保留优化版（代码块内部换行修复）
  * 功能：深度解析 DOM 结构，完美还原 Markdown 格式
@@ -15,7 +16,28 @@
                 user: '.user-query-container, .user-query-bubble-with-background, .user-query-content',
                 model: 'div.container'
             }
-        }
+        },
+        TIMING: {
+            RESTORE_DELAY: 1200,
+            CLICK_DELAY: 50,
+            RESET_DELAY: 100,
+            TRANSITION_DURATION: 300,
+            POSITION_UPDATE_DELAY: 10,
+            THEME_UPDATE_DELAY: 100,
+            URL_CHECK_INTERVAL: 1500,
+            INIT_DELAY: 1000
+        },
+        DRAG: {
+            EDGE_THRESHOLD: 50,
+            COLLAPSE_THRESHOLD: 1,
+            DRAG_THRESHOLD: 5
+        },
+        UI: {
+            CHECKBOX_OFFSET: 15,
+            DEFAULT_TRIGGER_RIGHT: 30,
+            DEFAULT_TRIGGER_BOTTOM: 30
+        },
+        COLLAPSED_CLASSES: ['collapsed-left', 'collapsed-right', 'collapsed-top', 'collapsed-bottom']
     };
 
     const state = {
@@ -31,38 +53,52 @@
             startX: undefined,
             startY: undefined,
             startLeft: 0,
-            startTop: 0
+            startTop: 0,
+            lastBallLeft: undefined,
+            lastBallTop: undefined
         }
     };
+
+    // --- 工具函数 ---
+    function getCopyButtonSelector() {
+        return '.mat-mdc-button-touch-target, button[aria-label*="copy" i], button[aria-label*="复制" i], [aria-label*="Copy" i]';
+    }
+
+    function findCopyButton(element, maxDepth = 5) {
+        let copyButton = element.querySelector(getCopyButtonSelector());
+        if (copyButton) return copyButton;
+        
+        let parent = element.parentElement;
+        let depth = 0;
+        while (parent && depth < maxDepth) {
+            copyButton = parent.querySelector(getCopyButtonSelector());
+            if (copyButton) return copyButton;
+            parent = parent.parentElement;
+            depth++;
+        }
+        return null;
+    }
+
+    function getContentElement(messageElement) {
+        if (messageElement.tagName === 'USER-QUERY') {
+            return messageElement.querySelector('.user-query-bubble-with-background') 
+                || messageElement.querySelector('.user-query-content')
+                || messageElement;
+        } else if (messageElement.tagName === 'MODEL-RESPONSE') {
+            return messageElement.querySelector('div.container') || messageElement;
+        }
+        return messageElement;
+    }
 
     // --- 获取复制按钮内容 ---
     function getCopyButtonContent(messageElement) {
         try {
-            let copyButton = messageElement.querySelector('.mat-mdc-button-touch-target, button[aria-label*="copy" i], button[aria-label*="复制" i], [aria-label*="Copy" i]');
-            if (!copyButton) {
-                let parent = messageElement.parentElement;
-                let depth = 0;
-                while (parent && depth < 5) {
-                    copyButton = parent.querySelector('.mat-mdc-button-touch-target, button[aria-label*="copy" i], button[aria-label*="复制" i]');
-                    if (copyButton) break;
-                    parent = parent.parentElement;
-                    depth++;
-                }
-            }
+            const copyButton = findCopyButton(messageElement);
             if (!copyButton) return null;
             
-            let contentElement = null;
-            if (messageElement.tagName === 'USER-QUERY') {
-                contentElement = messageElement.querySelector('.user-query-bubble-with-background') 
-                    || messageElement.querySelector('.user-query-content')
-                    || messageElement;
-            } else if (messageElement.tagName === 'MODEL-RESPONSE') {
-                contentElement = messageElement.querySelector('div.container') || messageElement;
-            } else {
-                contentElement = messageElement;
-            }
-            
+            const contentElement = getContentElement(messageElement);
             if (!contentElement) return null;
+            
             const clone = contentElement.cloneNode(true);
             clone.querySelectorAll('button, .icon, svg, img, .mat-mdc-button-touch-target').forEach(el => el.remove());
             return nodeToText(clone);
@@ -81,19 +117,18 @@
         const getChildrenText = (n) => Array.from(n.childNodes).map(nodeToText).join('');
 
         switch (tagName) {
-            case 'pre':
+            case 'pre': {
                 const code = node.querySelector('code');
-                if (code) {
-                    const lang = code.className.match(/language-(\w+)/)?.[1] || '';
-                    // 核心修复：确保代码内容末尾只有一个换行
-                    let codeText = (code.textContent || '').replace(/\s+$/, '') + '\n';
-                    const isInListItem = node.closest('li') !== null;
-                    const indent = isInListItem ? '    ' : '';
-                    return `${indent}\`\`\`${lang}\n${codeText}${indent}\`\`\`\n`;
-                }
                 const isInListItem = node.closest('li') !== null;
                 const indent = isInListItem ? '    ' : '';
+                
+                if (code) {
+                    const lang = code.className.match(/language-(\w+)/)?.[1] || '';
+                    const codeText = (code.textContent || '').replace(/\s+$/, '') + '\n';
+                    return `${indent}\`\`\`${lang}\n${codeText}${indent}\`\`\`\n`;
+                }
                 return `${indent}\`\`\`\n${node.textContent.trim()}\n${indent}\`\`\`\n`;
+            }
 
             case 'code':
                 if (node.parentElement?.tagName.toLowerCase() !== 'pre') {
@@ -101,35 +136,59 @@
                 }
                 return node.textContent;
 
-            case 'br': return '\n';
-            case 'strong': case 'b': return `**${getChildrenText(node).trim()}**`;
-            case 'em': case 'i': return `*${getChildrenText(node).trim()}*`;
-            case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6':
-                return `\n${'#'.repeat(parseInt(tagName[1]))} ${getChildrenText(node).trim()}\n\n`;
-            case 'ol':
-                let olItems = [];
+            case 'br': 
+                return '\n';
+            
+            case 'strong': 
+            case 'b': 
+                return `**${getChildrenText(node).trim()}**`;
+            
+            case 'em': 
+            case 'i': 
+                return `*${getChildrenText(node).trim()}*`;
+            
+            case 'h1': 
+            case 'h2': 
+            case 'h3': 
+            case 'h4': 
+            case 'h5': 
+            case 'h6': {
+                const level = parseInt(tagName[1]);
+                return `\n${'#'.repeat(level)} ${getChildrenText(node).trim()}\n\n`;
+            }
+            
+            case 'ol': {
+                const items = [];
                 Array.from(node.childNodes).forEach((child, i) => {
                     if (child.nodeType === 1 && child.tagName.toLowerCase() === 'li') {
-                        olItems.push(`${i + 1}. ${getChildrenText(child).replace(/^\s+/, '').replace(/\n+$/, '')}`);
+                        items.push(`${i + 1}. ${getChildrenText(child).replace(/^\s+/, '').replace(/\n+$/, '')}`);
                     }
                 });
-                return `\n${olItems.join('\n')}\n\n`;
-            case 'ul':
-                let ulItems = [];
+                return `\n${items.join('\n')}\n\n`;
+            }
+            
+            case 'ul': {
+                const items = [];
                 Array.from(node.childNodes).forEach(child => {
                     if (child.nodeType === 1 && child.tagName.toLowerCase() === 'li') {
-                        ulItems.push(`- ${getChildrenText(child).replace(/^\s+/, '').replace(/\n+$/, '')}`);
+                        items.push(`- ${getChildrenText(child).replace(/^\s+/, '').replace(/\n+$/, '')}`);
                     }
                 });
-                return `\n${ulItems.join('\n')}\n\n`;
+                return `\n${items.join('\n')}\n\n`;
+            }
+            
             case 'li':
                 return getChildrenText(node).replace(/^\n+/, '').replace(/\n+$/, '');
+            
             case 'blockquote':
                 return `\n> ${getChildrenText(node).trim().replace(/\n/g, '\n> ')}\n\n`;
+            
             case 'p':
-            case 'div':
+            case 'div': {
                 const isBlock = ['p', 'div'].includes(tagName);
                 return `${isBlock ? '\n' : ''}${getChildrenText(node)}${isBlock ? '\n' : ''}`;
+            }
+            
             default:
                 return getChildrenText(node);
         }
@@ -138,40 +197,26 @@
     // --- 主题检测与更新 ---
     function detectTheme() {
         // 方法1: 检查 body 类名
-        if (document.body.classList.contains('dark-theme')) {
-            return 'dark';
-        }
-        if (document.body.classList.contains('light-theme')) {
-            return 'light';
-        }
+        if (document.body.classList.contains('dark-theme')) return 'dark';
+        if (document.body.classList.contains('light-theme')) return 'light';
         
         // 方法2: 检查实际背景色
         try {
             const computedStyle = window.getComputedStyle(document.body);
             const bgColor = computedStyle.backgroundColor;
             
-            // 将背景色转换为 RGB 值
             const rgbMatch = bgColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
             if (rgbMatch) {
-                const r = parseInt(rgbMatch[1]);
-                const g = parseInt(rgbMatch[2]);
-                const b = parseInt(rgbMatch[3]);
-                // 计算亮度 (使用相对亮度公式)
+                const [, r, g, b] = rgbMatch.map(Number);
                 const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-                // 如果亮度小于 128，认为是深色主题
-                if (brightness < 128) {
-                    return 'dark';
-                }
+                if (brightness < 128) return 'dark';
             }
             
-            // 检查 CSS 变量
             const surfaceColor = computedStyle.getPropertyValue('--gem-sys-color--surface') || 
                                computedStyle.getPropertyValue('--mat-sys-surface');
             if (surfaceColor) {
-                // 如果包含深色相关的颜色值
-                if (surfaceColor.includes('rgb(32, 33, 36)') || 
-                    surfaceColor.includes('#202124') ||
-                    surfaceColor.includes('rgb(45, 46, 48)')) {
+                const darkColors = ['rgb(32, 33, 36)', '#202124', 'rgb(45, 46, 48)'];
+                if (darkColors.some(color => surfaceColor.includes(color))) {
                     return 'dark';
                 }
             }
@@ -180,8 +225,7 @@
         }
         
         // 方法3: 检查 prefers-color-scheme（作为后备）
-        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (prefersDark) {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
             return 'dark';
         }
         
@@ -189,8 +233,8 @@
     }
 
     function getThemeColors(theme) {
-        if (theme === 'dark') {
-            return {
+        const themes = {
+            dark: {
                 sidebarBg: '#202124',
                 headerBg: '#2d2e30',
                 footerBg: '#2d2e30',
@@ -207,10 +251,10 @@
                 btnPrimaryText: '#202124',
                 triggerBg: '#8ab4f8',
                 triggerText: '#202124',
-                shadow: 'rgba(0,0,0,0.5)'
-            };
-        } else {
-            return {
+                shadow: 'rgba(0,0,0,0.5)',
+                primaryHoverColor: '#aecbfa'
+            },
+            light: {
                 sidebarBg: '#ffffff',
                 headerBg: '#f8f9fa',
                 footerBg: '#f8f9fa',
@@ -227,97 +271,86 @@
                 btnPrimaryText: '#ffffff',
                 triggerBg: '#1a73e8',
                 triggerText: '#ffffff',
-                shadow: 'rgba(0,0,0,0.25)'
-            };
-        }
+                shadow: 'rgba(0,0,0,0.25)',
+                primaryHoverColor: '#1557b0'
+            }
+        };
+        return themes[theme] || themes.light;
     }
 
     function updateTheme() {
         const newTheme = detectTheme();
-        // 如果主题没有变化且已初始化，则跳过
         if (state.currentTheme && newTheme === state.currentTheme) return;
         
         state.currentTheme = newTheme;
         const colors = getThemeColors(newTheme);
-        const sidebar = document.getElementById('gemini-export-sidebar');
-        const trigger = document.getElementById('export-trigger');
         const style = document.getElementById('gemini-export-theme-style');
         
-        // 计算主按钮悬停颜色
-        let primaryHoverColor;
-        if (newTheme === 'dark') {
-            // 暗色主题：使用浅一点的蓝色
-            primaryHoverColor = '#aecbfa';
-        } else {
-            // 亮色主题：使用深一点的蓝色
-            primaryHoverColor = '#1557b0';
-        }
+        if (!style) return;
         
-        if (style) {
-            style.textContent = `
-                #gemini-export-sidebar { 
-                    background: ${colors.sidebarBg} !important;
-                }
-                .gemini-header { 
-                    background: ${colors.headerBg} !important;
-                    border-bottom-color: ${colors.border} !important;
-                }
-                .gemini-header span { 
-                    color: ${colors.headerText} !important;
-                }
-                #close-gemini-export { 
-                    color: ${colors.headerText} !important;
-                }
-                .gemini-preview { 
-                    background: ${colors.previewBg} !important;
-                    color: ${colors.previewText} !important;
-                }
-                .gemini-footer { 
-                    background: ${colors.footerBg} !important;
-                    border-top-color: ${colors.border} !important;
-                }
-                .gemini-btn-small { 
-                    background: ${colors.btnBg} !important;
-                    color: ${colors.btnText} !important;
-                    border-color: ${colors.btnBorder} !important;
-                }
-                .gemini-btn-small:hover { 
-                    background: ${colors.btnHoverBg} !important;
-                    border-color: ${colors.btnPrimaryBg} !important;
-                }
-                .gemini-btn { 
-                    background: ${colors.btnBg} !important;
-                    color: ${colors.btnText} !important;
-                    border-color: ${colors.btnBorder} !important;
-                }
-                .gemini-btn:hover { 
-                    background: ${colors.btnHoverBg} !important;
-                }
-                .gemini-btn-primary { 
-                    background: ${colors.btnPrimaryBg} !important;
-                    color: ${colors.btnPrimaryText} !important;
-                    border: none !important;
-                }
-                .gemini-btn-primary:hover { 
-                    background: ${primaryHoverColor} !important;
-                }
-                .gemini-btn:disabled { 
-                    opacity: 0.6 !important; 
-                    cursor: not-allowed !important; 
-                }
-                #export-trigger { 
-                    background: ${colors.triggerBg} !important;
-                    color: ${colors.triggerText} !important;
-                    box-shadow: 0 4px 12px ${colors.shadow}, 0 2px 4px rgba(0,0,0,0.1) !important;
-                }
-                #export-trigger:not(.collapsed-left):not(.collapsed-right):not(.collapsed-top):not(.collapsed-bottom):hover {
-                    box-shadow: 0 6px 16px ${colors.shadow}, 0 2px 4px rgba(0,0,0,0.15) !important;
-                }
-                .cb-input { 
-                    accent-color: ${colors.btnPrimaryBg} !important;
-                }
-            `;
-        }
+        style.textContent = `
+            #gemini-export-sidebar { 
+                background: ${colors.sidebarBg} !important;
+            }
+            .gemini-header { 
+                background: ${colors.headerBg} !important;
+                border-bottom-color: ${colors.border} !important;
+            }
+            .gemini-header span { 
+                color: ${colors.headerText} !important;
+            }
+            #close-gemini-export { 
+                color: ${colors.headerText} !important;
+            }
+            .gemini-preview { 
+                background: ${colors.previewBg} !important;
+                color: ${colors.previewText} !important;
+            }
+            .gemini-footer { 
+                background: ${colors.footerBg} !important;
+                border-top-color: ${colors.border} !important;
+            }
+            .gemini-btn-small { 
+                background: ${colors.btnBg} !important;
+                color: ${colors.btnText} !important;
+                border-color: ${colors.btnBorder} !important;
+            }
+            .gemini-btn-small:hover { 
+                background: ${colors.btnHoverBg} !important;
+                border-color: ${colors.btnPrimaryBg} !important;
+            }
+            .gemini-btn { 
+                background: ${colors.btnBg} !important;
+                color: ${colors.btnText} !important;
+                border-color: ${colors.btnBorder} !important;
+            }
+            .gemini-btn:hover { 
+                background: ${colors.btnHoverBg} !important;
+            }
+            .gemini-btn-primary { 
+                background: ${colors.btnPrimaryBg} !important;
+                color: ${colors.btnPrimaryText} !important;
+                border: none !important;
+            }
+            .gemini-btn-primary:hover { 
+                background: ${colors.primaryHoverColor} !important;
+            }
+            .gemini-btn:disabled { 
+                opacity: 0.6 !important; 
+                cursor: not-allowed !important; 
+            }
+            #export-trigger { 
+                background: ${colors.triggerBg} !important;
+                color: ${colors.triggerText} !important;
+                box-shadow: 0 4px 12px ${colors.shadow}, 0 2px 4px rgba(0,0,0,0.1) !important;
+            }
+            #export-trigger:not(.collapsed-left):not(.collapsed-right):not(.collapsed-top):not(.collapsed-bottom):hover {
+                box-shadow: 0 6px 16px ${colors.shadow}, 0 2px 4px rgba(0,0,0,0.15) !important;
+            }
+            .cb-input { 
+                accent-color: ${colors.btnPrimaryBg} !important;
+            }
+        `;
     }
 
     function setupThemeObserver() {
@@ -325,38 +358,75 @@
             state.themeObserver.disconnect();
         }
         
-        // 监听 body 类名变化
-        state.themeObserver = new MutationObserver(() => {
-            updateTheme();
-        });
-        
+        state.themeObserver = new MutationObserver(updateTheme);
         state.themeObserver.observe(document.body, {
             attributes: true,
             attributeFilter: ['class']
         });
         
-        // 监听系统主题变化
         if (window.matchMedia) {
             const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
             mediaQuery.addEventListener('change', updateTheme);
         }
         
-        // 初始更新
         updateTheme();
     }
 
+    // --- 按钮状态管理 ---
+    function createButtonStateManager(btn, btnIcon, btnText) {
+        const cleanup = () => {
+            if (btn._restoreTimeout) {
+                clearTimeout(btn._restoreTimeout);
+                btn._restoreTimeout = null;
+            }
+            if (btn._mouseEnterHandler) {
+                btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
+                btn._mouseEnterHandler = null;
+            }
+        };
+
+        const restore = (originalIcon, originalText) => {
+            btnIcon.textContent = originalIcon;
+            btnText.textContent = originalText;
+            btn.classList.remove('success');
+            btn._isProcessing = false;
+            cleanup();
+        };
+
+        const showFeedback = (icon, text, isSuccess = true) => {
+            const originalIcon = btnIcon.textContent;
+            const originalText = btnText.textContent;
+            
+            btnIcon.textContent = icon;
+            btnText.textContent = text;
+            if (isSuccess) {
+                btn.classList.add('success');
+            }
+            
+            const restoreFn = () => restore(originalIcon, originalText);
+            
+            btn._mouseEnterHandler = () => {
+                if (btn._restoreTimeout) {
+                    clearTimeout(btn._restoreTimeout);
+                    btn._restoreTimeout = null;
+                }
+                restoreFn();
+            };
+            btn.addEventListener('mouseenter', btn._mouseEnterHandler);
+            
+            btn._restoreTimeout = setTimeout(restoreFn, CONFIG.TIMING.RESTORE_DELAY);
+        };
+
+        return {
+            isProcessing: () => btn._isProcessing,
+            setProcessing: (value) => { btn._isProcessing = value; },
+            cleanup,
+            showFeedback
+        };
+    }
+
     // --- UI 注入 ---
-    function injectUI() {
-        if (document.getElementById('gemini-export-sidebar')) return;
-        
-        // 创建主题样式元素
-        const themeStyle = document.createElement('style');
-        themeStyle.id = 'gemini-export-theme-style';
-        document.head.appendChild(themeStyle);
-        
-        // 立即应用主题样式，避免初始加载时没有颜色
-        updateTheme();
-        
+    function createStyles() {
         const style = document.createElement('style');
         style.textContent = `
             #gemini-export-sidebar { position: fixed; top: 0; right: 0; width: ${CONFIG.SIDEBAR_WIDTH}px; height: 100vh; background: #ffffff; box-shadow: -2px 0 10px rgba(0,0,0,0.1); z-index: 2147483647; transform: translateX(100%); transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; font-family: -apple-system, sans-serif; }
@@ -453,7 +523,6 @@
                 cursor: grabbing;
                 transition: border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             }
-            /* 左侧贴合：左侧方形，右侧圆形 */
             #export-trigger.collapsed-left {
                 left: 0 !important;
                 transform: translateX(calc(-100% + 18px));
@@ -462,7 +531,6 @@
             #export-trigger.collapsed-left:hover {
                 transform: translateX(0) scale(1.1);
             }
-            /* 右侧贴合：右侧方形，左侧圆形 */
             #export-trigger.collapsed-right {
                 left: auto !important;
                 transform: translateX(calc(100% - 18px));
@@ -471,7 +539,6 @@
             #export-trigger.collapsed-right:hover {
                 transform: translateX(0) scale(1.1);
             }
-            /* 上方贴合：上方方形，下方圆形 */
             #export-trigger.collapsed-top {
                 top: 0 !important;
                 transform: translateY(calc(-100% + 18px));
@@ -480,7 +547,6 @@
             #export-trigger.collapsed-top:hover {
                 transform: translateY(0) scale(1.1);
             }
-            /* 下方贴合：下方方形，上方圆形 */
             #export-trigger.collapsed-bottom {
                 bottom: 0 !important;
                 top: auto !important;
@@ -496,11 +562,11 @@
             }
             body.export-open infinite-scroller.chat-history { padding-left: 60px !important; }
         `;
-        document.head.appendChild(style);
+        return style;
+    }
 
-        const sb = document.createElement('div');
-        sb.id = 'gemini-export-sidebar';
-        sb.innerHTML = `
+    function createSidebarHTML() {
+        return `
             <div class="gemini-header">
                 <div class="gemini-header-top">
                     <span style="font-weight:bold">Gemini to Markdown</span>
@@ -525,34 +591,20 @@
                 </button>
             </div>
         `;
-        document.body.appendChild(sb);
-        state.sidebar = sb;
+    }
 
-        const trigger = document.createElement('button');
-        trigger.id = 'export-trigger';
-        trigger.innerHTML = '<span style="line-height:1; font-size:18px;">📄</span>';
-        trigger.title = '导出 Markdown';
-        document.body.appendChild(trigger);
-
-        // 加载保存的位置
-        loadTriggerPosition(trigger);
-
-        // 拖动功能
-        setupDragAndDrop(trigger, sb);
-        
-        // 切换侧边栏状态的函数
+    function setupSidebarEventHandlers(sidebar, trigger) {
         const toggleSidebar = () => {
-            const isOpen = sb.classList.toggle('open');
+            const isOpen = sidebar.classList.toggle('open');
             document.body.classList.toggle('export-open', isOpen);
             
-            // 调整页面主容器的布局，确保内容被推开
             const mainContainers = [
                 document.querySelector('main'),
                 document.querySelector('[role="main"]'),
                 document.querySelector('.main-container'),
                 document.querySelector('#main-content'),
                 document.body.firstElementChild
-            ].filter(el => el && el !== sb && el !== trigger);
+            ].filter(el => el && el !== sidebar && el !== trigger);
             
             mainContainers.forEach(container => {
                 if (isOpen) {
@@ -563,8 +615,6 @@
                 }
             });
             
-            // 调整小球位置，确保它跟随页面内容移动
-            // 先启用位置过渡，让小球平滑移动（与侧边栏展开速度一致）
             if (!trigger.classList.contains('dragging')) {
                 trigger.style.transition = 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), right 0.3s cubic-bezier(0.4, 0, 0.2, 1), top 0.3s cubic-bezier(0.4, 0, 0.2, 1), bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
             }
@@ -576,9 +626,7 @@
                 const distanceToWindowRight = window.innerWidth - rect.right;
                 
                 if (isOpen) {
-                    // 侧边栏打开时
                     if (isCollapsedRight || (currentRight && parseFloat(currentRight) < 50) || distanceToWindowRight < 50) {
-                        // 小球在右侧边缘附近，调整到可视区域右边缘
                         trigger.style.right = `${CONFIG.SIDEBAR_WIDTH}px`;
                         trigger.style.left = 'auto';
                         if (!isCollapsedRight) {
@@ -586,40 +634,35 @@
                         }
                     }
                 } else {
-                    // 侧边栏关闭时
                     if (isCollapsedRight) {
-                        // 如果小球贴合在可视区域右边缘，调整回浏览器窗口右边缘
                         trigger.style.right = '0';
                         trigger.style.left = 'auto';
                     } else if (currentRight && parseFloat(currentRight) === CONFIG.SIDEBAR_WIDTH) {
-                        // 如果小球原本在可视区域右边缘，调整回浏览器窗口右边缘
                         trigger.style.right = '0';
                         trigger.style.left = 'auto';
                         trigger.classList.add('collapsed-right');
                     }
                 }
                 
-                // 过渡完成后，恢复正常的 transition（如果不在拖动状态）
                 setTimeout(() => {
                     if (!trigger.classList.contains('dragging')) {
                         trigger.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s, border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
                     }
-                }, 300);
-            }, 10);
+                }, CONFIG.TIMING.TRANSITION_DURATION);
+            }, CONFIG.TIMING.POSITION_UPDATE_DELAY);
             
             if (isOpen) syncCheckboxes();
         };
-        
-        // 滚动到顶部功能
-        function scrollToTop() {
+
+        const scrollToTop = () => {
             const history = document.querySelector(CONFIG.SELECTORS.history);
             if (history) {
                 history.scrollTo({ top: 0, behavior: 'smooth' });
             } else {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
-        }
-        
+        };
+
         document.getElementById('close-gemini-export').onclick = toggleSidebar;
         document.getElementById('gemini-copy').onclick = handleCopy;
         document.getElementById('gemini-download').onclick = handleDownload;
@@ -627,137 +670,120 @@
         document.getElementById('invert-select-btn').onclick = handleInvertSelect;
         document.getElementById('clear-select-btn').onclick = handleClearSelect;
         document.getElementById('scroll-to-top-btn').onclick = scrollToTop;
-        
-        // 将切换函数暴露给拖动处理函数使用
+
         state.toggleSidebar = toggleSidebar;
+    }
+
+    function injectUI() {
+        if (document.getElementById('gemini-export-sidebar')) return;
         
-        // 设置主题监听
+        const themeStyle = document.createElement('style');
+        themeStyle.id = 'gemini-export-theme-style';
+        document.head.appendChild(themeStyle);
+        updateTheme();
+        
+        document.head.appendChild(createStyles());
+
+        const sidebar = document.createElement('div');
+        sidebar.id = 'gemini-export-sidebar';
+        sidebar.innerHTML = createSidebarHTML();
+        document.body.appendChild(sidebar);
+        state.sidebar = sidebar;
+
+        const trigger = document.createElement('button');
+        trigger.id = 'export-trigger';
+        trigger.innerHTML = '<span style="line-height:1; font-size:18px;">📄</span>';
+        trigger.title = '导出 Markdown';
+        document.body.appendChild(trigger);
+
+        loadTriggerPosition(trigger);
+        setupDragAndDrop(trigger, sidebar);
+        setupSidebarEventHandlers(sidebar, trigger);
         setupThemeObserver();
     }
 
-    // 加载悬浮球位置
+    // --- 位置管理 ---
     function loadTriggerPosition(trigger) {
         try {
             const saved = localStorage.getItem('gemini-export-trigger-position');
-            if (saved) {
-                const pos = JSON.parse(saved);
-                
-                // 恢复位置
-                // 优先使用 right/bottom（靠边时通常使用这些）
-                if (pos.right !== undefined || pos.bottom !== undefined) {
-                    if (pos.right !== undefined) {
-                        trigger.style.right = pos.right + 'px';
-                        trigger.style.left = 'auto';
-                    }
-                    if (pos.bottom !== undefined) {
-                        trigger.style.bottom = pos.bottom + 'px';
-                        trigger.style.top = 'auto';
-                    }
-                    // 如果只有 right 或 bottom，另一个方向使用 left/top（如果存在）
-                    if (pos.left !== undefined && pos.right === undefined) {
-                        trigger.style.left = pos.left + 'px';
-                    }
-                    if (pos.top !== undefined && pos.bottom === undefined) {
-                        trigger.style.top = pos.top + 'px';
-                    }
-                } else if (pos.left !== undefined || pos.top !== undefined) {
-                    // 使用 left/top 定位
-                    if (pos.left !== undefined) {
-                        trigger.style.left = pos.left + 'px';
-                        trigger.style.right = 'auto';
-                    }
-                    if (pos.top !== undefined) {
-                        trigger.style.top = pos.top + 'px';
-                        trigger.style.bottom = 'auto';
-                    }
+            if (!saved) {
+                trigger.style.right = `${CONFIG.UI.DEFAULT_TRIGGER_RIGHT}px`;
+                trigger.style.bottom = `${CONFIG.UI.DEFAULT_TRIGGER_BOTTOM}px`;
+                return;
+            }
+
+            const pos = JSON.parse(saved);
+            
+            if (pos.right !== undefined || pos.bottom !== undefined) {
+                if (pos.right !== undefined) {
+                    trigger.style.right = pos.right + 'px';
+                    trigger.style.left = 'auto';
                 }
-                
-                // 恢复贴边状态
-                if (pos.collapsed) {
-                    trigger.classList.remove('collapsed-left', 'collapsed-right', 'collapsed-top', 'collapsed-bottom');
-                    trigger.classList.add(pos.collapsed);
-                    
-                    // 根据贴边状态设置 border-radius
-                    switch(pos.collapsed) {
-                        case 'collapsed-left':
-                            trigger.style.borderRadius = '0 50% 50% 0';
-                            break;
-                        case 'collapsed-right':
-                            trigger.style.borderRadius = '50% 0 0 50%';
-                            break;
-                        case 'collapsed-top':
-                            trigger.style.borderRadius = '0 0 50% 50%';
-                            break;
-                        case 'collapsed-bottom':
-                            trigger.style.borderRadius = '50% 50% 0 0';
-                            break;
-                    }
-                } else {
-                    trigger.style.borderRadius = '50%';
+                if (pos.bottom !== undefined) {
+                    trigger.style.bottom = pos.bottom + 'px';
+                    trigger.style.top = 'auto';
                 }
+                if (pos.left !== undefined && pos.right === undefined) {
+                    trigger.style.left = pos.left + 'px';
+                }
+                if (pos.top !== undefined && pos.bottom === undefined) {
+                    trigger.style.top = pos.top + 'px';
+                }
+            } else if (pos.left !== undefined || pos.top !== undefined) {
+                if (pos.left !== undefined) {
+                    trigger.style.left = pos.left + 'px';
+                    trigger.style.right = 'auto';
+                }
+                if (pos.top !== undefined) {
+                    trigger.style.top = pos.top + 'px';
+                    trigger.style.bottom = 'auto';
+                }
+            }
+            
+            if (pos.collapsed) {
+                trigger.classList.remove(...CONFIG.COLLAPSED_CLASSES);
+                trigger.classList.add(pos.collapsed);
+                
+                const borderRadiusMap = {
+                    'collapsed-left': '0 50% 50% 0',
+                    'collapsed-right': '50% 0 0 50%',
+                    'collapsed-top': '0 0 50% 50%',
+                    'collapsed-bottom': '50% 50% 0 0'
+                };
+                trigger.style.borderRadius = borderRadiusMap[pos.collapsed] || '50%';
             } else {
-                // 默认位置：右下角
-                trigger.style.right = '30px';
-                trigger.style.bottom = '30px';
+                trigger.style.borderRadius = '50%';
             }
         } catch (e) {
             console.error('[Gemini Export] Failed to load trigger position:', e);
         }
     }
 
-    // 保存悬浮球位置
     function saveTriggerPosition(trigger) {
         try {
-            const rect = trigger.getBoundingClientRect();
             const pos = {};
+            const style = trigger.style;
             
-            // 保存位置信息
-            const leftValue = trigger.style.left;
-            const topValue = trigger.style.top;
-            const rightValue = trigger.style.right;
-            const bottomValue = trigger.style.bottom;
+            const parseStyleValue = (value) => {
+                if (!value || value === 'auto' || value === '') return undefined;
+                const num = parseFloat(value);
+                return isNaN(num) ? undefined : num;
+            };
+
+            pos.left = parseStyleValue(style.left);
+            pos.top = parseStyleValue(style.top);
+            pos.right = parseStyleValue(style.right);
+            pos.bottom = parseStyleValue(style.bottom);
             
-            // 使用更严格的检查，确保 0 值也能被保存
-            if (leftValue && leftValue !== 'auto' && leftValue !== '') {
-                const leftNum = parseFloat(leftValue);
-                if (!isNaN(leftNum)) {
-                    pos.left = leftNum;
-                }
-            }
-            if (topValue && topValue !== 'auto' && topValue !== '') {
-                const topNum = parseFloat(topValue);
-                if (!isNaN(topNum)) {
-                    pos.top = topNum;
-                }
-            }
-            if (rightValue && rightValue !== 'auto' && rightValue !== '') {
-                const rightNum = parseFloat(rightValue);
-                if (!isNaN(rightNum)) {
-                    pos.right = rightNum;  // 包括 0 值
-                }
-            }
-            if (bottomValue && bottomValue !== 'auto' && bottomValue !== '') {
-                const bottomNum = parseFloat(bottomValue);
-                if (!isNaN(bottomNum)) {
-                    pos.bottom = bottomNum;  // 包括 0 值
-                }
-            }
-            
-            // 如果没有明确的定位值，使用 getBoundingClientRect 的位置
             if (pos.left === undefined && pos.right === undefined && pos.top === undefined && pos.bottom === undefined) {
+                const rect = trigger.getBoundingClientRect();
                 pos.left = rect.left;
                 pos.top = rect.top;
             }
             
-            // 保存贴边状态
-            if (trigger.classList.contains('collapsed-left')) {
-                pos.collapsed = 'collapsed-left';
-            } else if (trigger.classList.contains('collapsed-right')) {
-                pos.collapsed = 'collapsed-right';
-            } else if (trigger.classList.contains('collapsed-top')) {
-                pos.collapsed = 'collapsed-top';
-            } else if (trigger.classList.contains('collapsed-bottom')) {
-                pos.collapsed = 'collapsed-bottom';
+            const collapsedClass = CONFIG.COLLAPSED_CLASSES.find(cls => trigger.classList.contains(cls));
+            if (collapsedClass) {
+                pos.collapsed = collapsedClass;
             }
             
             localStorage.setItem('gemini-export-trigger-position', JSON.stringify(pos));
@@ -766,34 +792,221 @@
         }
     }
 
-    // 设置拖动和边缘检测
+    // --- 拖动处理 ---
+    function handleDragStart(e, trigger, isTouch = false) {
+        if (isTouch && e.touches.length !== 1) return;
+        if (!isTouch && e.button !== 0) return;
+        
+        const point = isTouch ? e.touches[0] : e;
+        state.dragState.hasMoved = false;
+        state.dragState.startX = point.clientX;
+        state.dragState.startY = point.clientY;
+        
+        const rect = trigger.getBoundingClientRect();
+        state.dragState.startLeft = rect.left;
+        state.dragState.startTop = rect.top;
+        // 初始化球的位置记录
+        state.dragState.lastBallLeft = rect.left;
+        state.dragState.lastBallTop = rect.top;
+    }
+
+    function handleDragMove(e, trigger, isTouch = false) {
+        if (state.dragState.startX === undefined || state.dragState.startY === undefined) return;
+        if (isTouch && e.touches.length !== 1) return;
+        
+        const point = isTouch ? e.touches[0] : e;
+        const deltaX = point.clientX - state.dragState.startX;
+        const deltaY = point.clientY - state.dragState.startY;
+        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        if (!state.dragState.hasMoved && distance > CONFIG.DRAG.DRAG_THRESHOLD) {
+            state.dragState.hasMoved = true;
+            state.dragState.isDragging = true;
+            trigger.classList.add('dragging');
+            trigger.style.transition = 'border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+        }
+        
+        if (!state.dragState.isDragging) return;
+        
+        const sidebarOpen = document.body.classList.contains('export-open');
+        const visibleWidth = sidebarOpen ? window.innerWidth - CONFIG.SIDEBAR_WIDTH : window.innerWidth;
+        const visibleHeight = window.innerHeight;
+        
+        // 先计算球应该移动到的位置（基于鼠标位置）
+        let newLeft = state.dragState.startLeft + deltaX;
+        let newTop = state.dragState.startTop + deltaY;
+        
+        const maxLeft = visibleWidth - trigger.offsetWidth;
+        const maxTop = visibleHeight - trigger.offsetHeight;
+        
+        newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+        newTop = Math.max(0, Math.min(newTop, maxTop));
+        
+        // 检查当前是否已经贴合边缘
+        const isCurrentlyCollapsed = CONFIG.COLLAPSED_CLASSES.some(cls => trigger.classList.contains(cls));
+        const currentCollapsedClass = CONFIG.COLLAPSED_CLASSES.find(cls => trigger.classList.contains(cls));
+        
+        // 如果已经贴合边缘，检查鼠标移动方向来判断是否应该释放贴合状态
+        if (isCurrentlyCollapsed) {
+            // 使用鼠标移动方向（deltaX/deltaY）来判断，而不是球的位置变化
+            // 因为球贴合边缘后位置被限制，无法通过位置变化判断
+            let shouldReleaseCollapse = false;
+            
+            if (currentCollapsedClass === 'collapsed-left') {
+                // 如果鼠标向右移动（deltaX > 0，远离左边缘），释放贴合状态
+                shouldReleaseCollapse = deltaX > CONFIG.DRAG.DRAG_THRESHOLD;
+            } else if (currentCollapsedClass === 'collapsed-right') {
+                // 如果鼠标向左移动（deltaX < 0，远离右边缘），释放贴合状态
+                shouldReleaseCollapse = deltaX < -CONFIG.DRAG.DRAG_THRESHOLD;
+            } else if (currentCollapsedClass === 'collapsed-top') {
+                // 如果鼠标向下移动（deltaY > 0，远离上边缘），释放贴合状态
+                shouldReleaseCollapse = deltaY > CONFIG.DRAG.DRAG_THRESHOLD;
+            } else if (currentCollapsedClass === 'collapsed-bottom') {
+                // 如果鼠标向上移动（deltaY < 0，远离下边缘），释放贴合状态
+                shouldReleaseCollapse = deltaY < -CONFIG.DRAG.DRAG_THRESHOLD;
+            }
+            
+            // 如果应该释放贴合状态
+            if (shouldReleaseCollapse) {
+                // 释放贴合状态，让球跟随鼠标移动
+                trigger.classList.remove(...CONFIG.COLLAPSED_CLASSES);
+                trigger.style.right = 'auto';
+                trigger.style.bottom = 'auto';
+                trigger.style.left = newLeft + 'px';
+                trigger.style.top = newTop + 'px';
+                
+                // 更新起始位置为当前实际位置
+                const rectAfter = trigger.getBoundingClientRect();
+                state.dragState.startLeft = rectAfter.left;
+                state.dragState.startTop = rectAfter.top;
+                // 更新起始鼠标位置，避免位置跳跃
+                state.dragState.startX = point.clientX;
+                state.dragState.startY = point.clientY;
+                // 重置球的位置记录
+                state.dragState.lastBallLeft = undefined;
+                state.dragState.lastBallTop = undefined;
+            } else {
+                // 保持贴合状态，球不移动（但记录鼠标位置变化，用于下次判断）
+                // 更新起始鼠标位置，但不更新球的位置
+                state.dragState.startX = point.clientX;
+                state.dragState.startY = point.clientY;
+                // 不更新 startLeft/startTop，保持贴合状态
+                return; // 保持贴合状态，不执行后续的边缘检测
+            }
+        } else {
+            // 未贴合边缘，正常移动球
+            trigger.classList.remove(...CONFIG.COLLAPSED_CLASSES);
+            trigger.style.right = 'auto';
+            trigger.style.bottom = 'auto';
+            trigger.style.left = newLeft + 'px';
+            trigger.style.top = newTop + 'px';
+        }
+        
+        // 重新获取位置进行边缘检测
+        const newRect = trigger.getBoundingClientRect();
+        const distances = {
+            left: newRect.left,
+            right: visibleWidth - newRect.right,
+            top: newRect.top,
+            bottom: visibleHeight - newRect.bottom
+        };
+        
+        const minDistance = Math.min(...Object.values(distances));
+        let isCollapsed = false;
+        
+        if (minDistance < CONFIG.DRAG.COLLAPSE_THRESHOLD) {
+            const edgeActions = {
+                left: () => {
+                    trigger.classList.add('collapsed-left');
+                    trigger.style.left = '0';
+                    trigger.style.right = 'auto';
+                    trigger.style.borderRadius = '0 50% 50% 0';
+                },
+                right: () => {
+                    trigger.classList.add('collapsed-right');
+                    trigger.style.right = sidebarOpen ? `${CONFIG.SIDEBAR_WIDTH}px` : '0';
+                    trigger.style.left = 'auto';
+                    trigger.style.borderRadius = '50% 0 0 50%';
+                },
+                top: () => {
+                    trigger.classList.add('collapsed-top');
+                    trigger.style.top = '0';
+                    trigger.style.bottom = 'auto';
+                    trigger.style.borderRadius = '0 0 50% 50%';
+                },
+                bottom: () => {
+                    trigger.classList.add('collapsed-bottom');
+                    trigger.style.bottom = '0';
+                    trigger.style.top = 'auto';
+                    trigger.style.borderRadius = '50% 50% 0 0';
+                }
+            };
+            
+            const nearestEdge = Object.keys(distances).find(key => distances[key] === minDistance);
+            if (nearestEdge && edgeActions[nearestEdge]) {
+                edgeActions[nearestEdge]();
+                isCollapsed = true;
+                
+                // 更新起始位置为贴合后的位置
+                const collapsedRect = trigger.getBoundingClientRect();
+                state.dragState.startLeft = collapsedRect.left;
+                state.dragState.startTop = collapsedRect.top;
+                // 更新鼠标位置，确保下次判断时 deltaX/deltaY 是基于正确的起始位置
+                state.dragState.startX = point.clientX;
+                state.dragState.startY = point.clientY;
+                // 重置球的位置记录
+                state.dragState.lastBallLeft = undefined;
+                state.dragState.lastBallTop = undefined;
+            }
+        }
+        
+        if (!isCollapsed) {
+            trigger.style.borderRadius = '50%';
+        }
+        
+        if (isTouch) e.preventDefault();
+    }
+
+    function handleDragEnd(trigger) {
+        const wasDragging = state.dragState.isDragging;
+        const hadMoved = state.dragState.hasMoved;
+        
+        if (state.dragState.isDragging) {
+            state.dragState.isDragging = false;
+            trigger.classList.remove('dragging');
+            trigger.style.transition = '';
+            saveTriggerPosition(trigger);
+        }
+        
+        state.dragState.startX = undefined;
+        state.dragState.startY = undefined;
+        // 重置球的位置记录
+        state.dragState.lastBallLeft = undefined;
+        state.dragState.lastBallTop = undefined;
+        
+        if (wasDragging || hadMoved) {
+            setTimeout(() => {
+                state.dragState.hasMoved = false;
+            }, CONFIG.TIMING.RESET_DELAY);
+        } else {
+            state.dragState.hasMoved = false;
+        }
+    }
+
     function setupDragAndDrop(trigger, sidebar) {
-        const EDGE_THRESHOLD = 50; // 边缘检测阈值（像素）
-        const COLLAPSE_THRESHOLD = 1; // 完全缩进的阈值（小球边缘与屏幕边缘相切的容差，单位：像素）
-        const DRAG_THRESHOLD = 5; // 拖动阈值（像素），超过此距离才认为是拖动
         let clickHandled = false;
 
         trigger.addEventListener('mousedown', (e) => {
-            if (e.button !== 0) return; // 只处理左键
-            
             clickHandled = false;
-            state.dragState.hasMoved = false;
-            state.dragState.startX = e.clientX;
-            state.dragState.startY = e.clientY;
-            
-            const rect = trigger.getBoundingClientRect();
-            state.dragState.startLeft = rect.left;
-            state.dragState.startTop = rect.top;
+            handleDragStart(e, trigger, false);
         });
         
-        // 点击处理
-        trigger.addEventListener('mouseup', (e) => {
-            // 如果拖动过，不处理点击
+        trigger.addEventListener('mouseup', () => {
             if (state.dragState.hasMoved || state.dragState.isDragging) {
+                clickHandled = false;
                 return;
             }
             
-            // 延迟处理点击，确保拖动状态已重置
             setTimeout(() => {
                 if (!state.dragState.hasMoved && !state.dragState.isDragging && !clickHandled) {
                     clickHandled = true;
@@ -805,387 +1018,164 @@
                         if (isOpen) syncCheckboxes();
                     }
                 }
-            }, 50);
+            }, CONFIG.TIMING.CLICK_DELAY);
         });
         
-        // 阻止默认点击行为
         trigger.onclick = (e) => {
             if (clickHandled || state.dragState.hasMoved || state.dragState.isDragging) {
                 e.preventDefault();
-                return;
             }
         };
 
-        document.addEventListener('mousemove', (e) => {
-            if (state.dragState.startX === undefined || state.dragState.startY === undefined) return;
-            
-            const deltaX = e.clientX - state.dragState.startX;
-            const deltaY = e.clientY - state.dragState.startY;
-            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-            
-            // 如果移动距离超过阈值，开始拖动
-            if (!state.dragState.hasMoved && distance > DRAG_THRESHOLD) {
-                state.dragState.hasMoved = true;
-                state.dragState.isDragging = true;
-                trigger.classList.add('dragging');
-                // 只禁用位置相关的过渡，保留 border-radius 的过渡以实现平滑变化
-                trigger.style.transition = 'border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-            }
-            
-            if (!state.dragState.isDragging) return;
-            
-            let newLeft = state.dragState.startLeft + deltaX;
-            let newTop = state.dragState.startTop + deltaY;
-            
-            // 计算实际可视区域（考虑侧边栏是否打开）
-            const sidebarOpen = document.body.classList.contains('export-open');
-            const visibleWidth = sidebarOpen ? window.innerWidth - CONFIG.SIDEBAR_WIDTH : window.innerWidth;
-            const visibleHeight = window.innerHeight;
-            
-            // 限制在可视区域内
-            const maxLeft = visibleWidth - trigger.offsetWidth;
-            const maxTop = visibleHeight - trigger.offsetHeight;
-            
-            newLeft = Math.max(0, Math.min(newLeft, maxLeft));
-            newTop = Math.max(0, Math.min(newTop, maxTop));
-            
-            trigger.style.left = newLeft + 'px';
-            trigger.style.top = newTop + 'px';
-            trigger.style.right = 'auto';
-            trigger.style.bottom = 'auto';
-            
-            // 移除之前的缩进类
-            trigger.classList.remove('collapsed-left', 'collapsed-right', 'collapsed-top', 'collapsed-bottom');
-            
-            // 边缘检测和自动贴合（使用实际可视区域）
-            const rect = trigger.getBoundingClientRect();
-            const distanceToLeft = rect.left;
-            const distanceToRight = visibleWidth - rect.right;  // 使用调整后的可视宽度
-            const distanceToTop = rect.top;
-            const distanceToBottom = visibleHeight - rect.bottom;
-            
-            // 找到最近边缘
-            const minDistance = Math.min(distanceToLeft, distanceToRight, distanceToTop, distanceToBottom);
-            
-            // 只有在真正缩进状态（距离 < COLLAPSE_THRESHOLD）时才显示方圆样式
-            let isCollapsed = false;
-            if (minDistance < COLLAPSE_THRESHOLD) {
-                if (distanceToLeft === minDistance) {
-                    trigger.classList.add('collapsed-left');
-                    trigger.style.left = '0';
-                    trigger.style.right = 'auto';
-                    trigger.style.borderRadius = '0 50% 50% 0';
-                    isCollapsed = true;
-                } else if (distanceToRight === minDistance) {
-                    trigger.classList.add('collapsed-right');
-                    // 如果侧边栏打开，右侧边缘应该是可视区域的右边缘
-                    trigger.style.right = sidebarOpen ? `${CONFIG.SIDEBAR_WIDTH}px` : '0';
-                    trigger.style.left = 'auto';
-                    trigger.style.borderRadius = '50% 0 0 50%';
-                    isCollapsed = true;
-                } else if (distanceToTop === minDistance) {
-                    trigger.classList.add('collapsed-top');
-                    trigger.style.top = '0';
-                    trigger.style.bottom = 'auto';
-                    trigger.style.borderRadius = '0 0 50% 50%';
-                    isCollapsed = true;
-                } else if (distanceToBottom === minDistance) {
-                    trigger.classList.add('collapsed-bottom');
-                    trigger.style.bottom = '0';
-                    trigger.style.top = 'auto';
-                    trigger.style.borderRadius = '50% 50% 0 0';
-                    isCollapsed = true;
-                }
-            }
-            
-            // 如果不在缩进状态，恢复为圆形
-            if (!isCollapsed) {
-                trigger.style.borderRadius = '50%';
-            }
-        });
+        document.addEventListener('mousemove', (e) => handleDragMove(e, trigger, false));
+        document.addEventListener('mouseup', () => handleDragEnd(trigger));
 
-        document.addEventListener('mouseup', (e) => {
-            const wasDragging = state.dragState.isDragging;
-            const hadMoved = state.dragState.hasMoved;
-            
-            if (state.dragState.isDragging) {
-                state.dragState.isDragging = false;
-                trigger.classList.remove('dragging');
-                trigger.style.transition = '';
-                
-                // 保存位置
-                saveTriggerPosition(trigger);
-            }
-            
-            // 重置拖动状态
-            state.dragState.startX = undefined;
-            state.dragState.startY = undefined;
-            
-            // 如果拖动过，延迟重置hasMoved，防止触发点击事件
-            if (wasDragging || hadMoved) {
-                setTimeout(() => {
-                    state.dragState.hasMoved = false;
-                }, 100);
-            } else {
-                state.dragState.hasMoved = false;
-            }
-        });
-
-        // 触摸设备支持
         trigger.addEventListener('touchstart', (e) => {
-            if (e.touches.length !== 1) return;
-            
-            state.dragState.hasMoved = false;
-            const touch = e.touches[0];
-            state.dragState.startX = touch.clientX;
-            state.dragState.startY = touch.clientY;
-            
-            const rect = trigger.getBoundingClientRect();
-            state.dragState.startLeft = rect.left;
-            state.dragState.startTop = rect.top;
+            clickHandled = false;
+            handleDragStart(e, trigger, true);
         });
-
-        document.addEventListener('touchmove', (e) => {
-            if (state.dragState.startX === undefined || state.dragState.startY === undefined || e.touches.length !== 1) return;
-            
-            const touch = e.touches[0];
-            const deltaX = touch.clientX - state.dragState.startX;
-            const deltaY = touch.clientY - state.dragState.startY;
-            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-            
-            // 如果移动距离超过阈值，开始拖动
-            if (!state.dragState.hasMoved && distance > DRAG_THRESHOLD) {
-                state.dragState.hasMoved = true;
-                state.dragState.isDragging = true;
-                trigger.classList.add('dragging');
-                // 只禁用位置相关的过渡，保留 border-radius 的过渡以实现平滑变化
-                trigger.style.transition = 'border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-            }
-            
-            if (!state.dragState.isDragging) return;
-            
-            let newLeft = state.dragState.startLeft + deltaX;
-            let newTop = state.dragState.startTop + deltaY;
-            
-            // 计算实际可视区域（考虑侧边栏是否打开）
-            const sidebarOpen = document.body.classList.contains('export-open');
-            const visibleWidth = sidebarOpen ? window.innerWidth - CONFIG.SIDEBAR_WIDTH : window.innerWidth;
-            const visibleHeight = window.innerHeight;
-            
-            const maxLeft = visibleWidth - trigger.offsetWidth;
-            const maxTop = visibleHeight - trigger.offsetHeight;
-            
-            newLeft = Math.max(0, Math.min(newLeft, maxLeft));
-            newTop = Math.max(0, Math.min(newTop, maxTop));
-            
-            trigger.style.left = newLeft + 'px';
-            trigger.style.top = newTop + 'px';
-            trigger.style.right = 'auto';
-            trigger.style.bottom = 'auto';
-            
-            trigger.classList.remove('collapsed-left', 'collapsed-right', 'collapsed-top', 'collapsed-bottom');
-            
-            // 边缘检测和自动贴合（使用实际可视区域）
-            const rect = trigger.getBoundingClientRect();
-            const distanceToLeft = rect.left;
-            const distanceToRight = visibleWidth - rect.right;  // 使用调整后的可视宽度
-            const distanceToTop = rect.top;
-            const distanceToBottom = visibleHeight - rect.bottom;
-            
-            const minDistance = Math.min(distanceToLeft, distanceToRight, distanceToTop, distanceToBottom);
-            
-            // 只有在真正缩进状态（距离 < COLLAPSE_THRESHOLD）时才显示方圆样式
-            let isCollapsed = false;
-            if (minDistance < COLLAPSE_THRESHOLD) {
-                if (distanceToLeft === minDistance) {
-                    trigger.classList.add('collapsed-left');
-                    trigger.style.left = '0';
-                    trigger.style.right = 'auto';
-                    trigger.style.borderRadius = '0 50% 50% 0';
-                    isCollapsed = true;
-                } else if (distanceToRight === minDistance) {
-                    trigger.classList.add('collapsed-right');
-                    // 如果侧边栏打开，右侧边缘应该是可视区域的右边缘
-                    trigger.style.right = sidebarOpen ? `${CONFIG.SIDEBAR_WIDTH}px` : '0';
-                    trigger.style.left = 'auto';
-                    trigger.style.borderRadius = '50% 0 0 50%';
-                    isCollapsed = true;
-                } else if (distanceToTop === minDistance) {
-                    trigger.classList.add('collapsed-top');
-                    trigger.style.top = '0';
-                    trigger.style.bottom = 'auto';
-                    trigger.style.borderRadius = '0 0 50% 50%';
-                    isCollapsed = true;
-                } else if (distanceToBottom === minDistance) {
-                    trigger.classList.add('collapsed-bottom');
-                    trigger.style.bottom = '0';
-                    trigger.style.top = 'auto';
-                    trigger.style.borderRadius = '50% 50% 0 0';
-                    isCollapsed = true;
-                }
-            }
-            
-            // 如果不在缩进状态，恢复为圆形
-            if (!isCollapsed) {
-                trigger.style.borderRadius = '50%';
-            }
-            
-            e.preventDefault();
-        });
-
-        document.addEventListener('touchend', () => {
-            const wasDragging = state.dragState.isDragging;
-            const hadMoved = state.dragState.hasMoved;
-            
-            if (state.dragState.isDragging) {
-                state.dragState.isDragging = false;
-                trigger.classList.remove('dragging');
-                trigger.style.transition = '';
-                
-                saveTriggerPosition(trigger);
-            }
-            
-            // 重置拖动状态
-            state.dragState.startX = undefined;
-            state.dragState.startY = undefined;
-            
-            // 如果拖动过，延迟重置hasMoved，防止触发点击事件
-            if (wasDragging || hadMoved) {
-                setTimeout(() => {
-                    state.dragState.hasMoved = false;
-                }, 100);
-            } else {
-                state.dragState.hasMoved = false;
-            }
-        });
+        document.addEventListener('touchmove', (e) => handleDragMove(e, trigger, true));
+        document.addEventListener('touchend', () => handleDragEnd(trigger));
     }
 
-    // 全选功能
+    // --- 选择功能 ---
+    function getCheckboxColumn() {
+        const history = document.querySelector(CONFIG.SELECTORS.history);
+        if (!history) return null;
+        
+        let column = document.getElementById('export-cb-column');
+        if (!column) {
+            column = document.createElement('div');
+            column.id = 'export-cb-column';
+            history.appendChild(column);
+        }
+        return column;
+    }
+
     function handleSelectAll() {
         const history = document.querySelector(CONFIG.SELECTORS.history);
         if (!history) return;
         
-        // 确保复选框已同步
         syncCheckboxes();
-        
         const messages = history.querySelectorAll(CONFIG.SELECTORS.messages);
-        const column = document.getElementById('export-cb-column');
+        const column = getCheckboxColumn();
         if (!column) return;
         
         messages.forEach((msg, idx) => {
             state.selectedMessages.add(idx);
             const wrapper = column.querySelector(`.cb-wrapper[data-idx="${idx}"]`);
-            if (wrapper) {
-                const checkbox = wrapper.querySelector('.cb-input');
-                if (checkbox) checkbox.checked = true;
-            }
+            const checkbox = wrapper?.querySelector('.cb-input');
+            if (checkbox) checkbox.checked = true;
         });
         updatePreview();
     }
 
-    // 反选功能
     function handleInvertSelect() {
         const history = document.querySelector(CONFIG.SELECTORS.history);
         if (!history) return;
         
-        // 确保复选框已同步
         syncCheckboxes();
-        
         const messages = history.querySelectorAll(CONFIG.SELECTORS.messages);
-        const column = document.getElementById('export-cb-column');
+        const column = getCheckboxColumn();
         if (!column) return;
         
         messages.forEach((msg, idx) => {
             const wrapper = column.querySelector(`.cb-wrapper[data-idx="${idx}"]`);
-            if (wrapper) {
-                const checkbox = wrapper.querySelector('.cb-input');
-                if (checkbox) {
-                    if (state.selectedMessages.has(idx)) {
-                        state.selectedMessages.delete(idx);
-                        checkbox.checked = false;
-                    } else {
-                        state.selectedMessages.add(idx);
-                        checkbox.checked = true;
-                    }
+            const checkbox = wrapper?.querySelector('.cb-input');
+            if (checkbox) {
+                if (state.selectedMessages.has(idx)) {
+                    state.selectedMessages.delete(idx);
+                    checkbox.checked = false;
+                } else {
+                    state.selectedMessages.add(idx);
+                    checkbox.checked = true;
                 }
             }
         });
         updatePreview();
     }
 
-    // 清空功能
     function handleClearSelect() {
         const history = document.querySelector(CONFIG.SELECTORS.history);
         if (!history) return;
         
-        // 确保复选框已同步
         syncCheckboxes();
-        
-        const column = document.getElementById('export-cb-column');
+        const column = getCheckboxColumn();
         if (!column) return;
         
-        // 清空所有选中的消息
         state.selectedMessages.clear();
-        
-        // 取消所有复选框的选中状态
-        const checkboxes = column.querySelectorAll('.cb-input');
-        checkboxes.forEach(checkbox => {
+        column.querySelectorAll('.cb-input').forEach(checkbox => {
             checkbox.checked = false;
         });
-        
         updatePreview();
     }
 
     function syncCheckboxes() {
         const history = document.querySelector(CONFIG.SELECTORS.history);
         if (!history) return;
-        let column = document.getElementById('export-cb-column') || (function(){
-            let c = document.createElement('div'); c.id = 'export-cb-column'; history.appendChild(c); return c;
-        })();
+        
+        const column = getCheckboxColumn();
+        if (!column) return;
+        
         const messages = history.querySelectorAll(CONFIG.SELECTORS.messages);
         messages.forEach((msg, idx) => {
             msg.setAttribute('data-export-idx', idx);
-            let wrapper = column.querySelector(`.cb-wrapper[data-idx="${idx}"]`) || (function(){
-                let w = document.createElement('div'); w.className = 'cb-wrapper'; w.dataset.idx = idx;
-                let i = document.createElement('input'); i.type = 'checkbox'; i.className = 'cb-input';
-                i.checked = state.selectedMessages.has(idx);
-                i.onchange = (e) => { e.target.checked ? state.selectedMessages.add(idx) : state.selectedMessages.delete(idx); updatePreview(); };
-                w.appendChild(i); column.appendChild(w); return w;
-            })();
-            const rect = msg.getBoundingClientRect(), parentRect = history.getBoundingClientRect();
-            wrapper.style.top = `${rect.top - parentRect.top + history.scrollTop + 15}px`;
+            
+            let wrapper = column.querySelector(`.cb-wrapper[data-idx="${idx}"]`);
+            if (!wrapper) {
+                wrapper = document.createElement('div');
+                wrapper.className = 'cb-wrapper';
+                wrapper.dataset.idx = idx;
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'cb-input';
+                checkbox.checked = state.selectedMessages.has(idx);
+                checkbox.onchange = (e) => {
+                    e.target.checked ? state.selectedMessages.add(idx) : state.selectedMessages.delete(idx);
+                    updatePreview();
+                };
+                
+                wrapper.appendChild(checkbox);
+                column.appendChild(wrapper);
+            }
+            
+            const rect = msg.getBoundingClientRect();
+            const parentRect = history.getBoundingClientRect();
+            wrapper.style.top = `${rect.top - parentRect.top + history.scrollTop + CONFIG.UI.CHECKBOX_OFFSET}px`;
         });
     }
 
     function updatePreview() {
         const preview = document.getElementById('gemini-md-preview');
         const sortedIndices = Array.from(state.selectedMessages).sort((a, b) => a - b);
-        let items = [];
+        const items = [];
 
         sortedIndices.forEach((idx) => {
             const el = document.querySelector(`[data-export-idx="${idx}"]`);
             if (!el) return;
-            const isUser = el.tagName === 'USER-QUERY', roleName = isUser ? 'You' : 'Gemini';
+            
+            const isUser = el.tagName === 'USER-QUERY';
+            const roleName = isUser ? 'You' : 'Gemini';
             let text = getCopyButtonContent(el);
+            
             if (!text || !text.trim()) {
                 const contentEl = el.querySelector(isUser ? CONFIG.SELECTORS.content.user : CONFIG.SELECTORS.content.model) || el;
                 const clone = contentEl.cloneNode(true);
                 clone.querySelectorAll('button, .icon, svg, mat-icon').forEach(n => n.remove());
                 text = nodeToText(clone);
             }
+            
             if (text && text.trim()) {
                 let processedText = text.trim();
                 
-                // 核心修复：清理正则替换中可能引入的代码块内多余空行
                 processedText = processedText.replace(/([A-Za-z][A-Za-z0-9\s]*?)\s*\n+(\s*)```\s*\n([\s\S]*?)\n(\s*)```/g, (match, langName, indentBefore, code, indentAfter) => {
                     const lang = langName.trim().replace(/\s+/g, '').toLowerCase();
                     const indent = indentBefore || indentAfter || '';
                     return `${indent}\`\`\`${lang}\n${code.trim()}\n${indent}\`\`\``;
                 });
                 
-                // 第二个正则替换（只匹配空格和制表符作为缩进，不包括换行符）
                 processedText = processedText.replace(/([ \t]*)```(\w+)?\n([\s\S]*?)\n([ \t]*)```/g, (match, indentBefore, lang, code, indentAfter) => {
-                    // 只使用空格和制表符作为缩进，移除换行符
                     const indent = (indentBefore || indentAfter || '').replace(/[\n\r]/g, '');
                     return `${indent}\`\`\`${lang || ''}\n${code.trim()}\n${indent}\`\`\``;
                 });
@@ -1194,13 +1184,14 @@
             }
         });
 
-        let finalMarkdown = items.join('\n\n---\n\n');
+        const finalMarkdown = items.join('\n\n---\n\n');
         preview.textContent = finalMarkdown
             .replace(/[ \t]+$/gm, '') 
             .replace(/\n{3,}/g, '\n\n')
             .trim() || "请勾选消息以开始导出";
     }
 
+    // --- 导出功能 ---
     async function handleCopy() {
         const text = document.getElementById('gemini-md-preview').textContent;
         if (!text || text.startsWith("请勾选")) return;
@@ -1208,98 +1199,18 @@
         const btn = document.getElementById('gemini-copy');
         const btnIcon = btn.querySelector('.btn-icon');
         const btnText = btn.querySelector('.btn-text');
+        const manager = createButtonStateManager(btn, btnIcon, btnText);
         
-        // 如果正在处理中，直接返回
-        if (btn._isProcessing) return;
-        
-        // 如果已经有恢复定时器，清除它
-        if (btn._restoreTimeout) {
-            clearTimeout(btn._restoreTimeout);
-            btn._restoreTimeout = null;
-        }
-        
-        // 如果已经有鼠标进入事件处理器，清除它
-        if (btn._mouseEnterHandler) {
-            btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
-            btn._mouseEnterHandler = null;
-        }
-        
-        // 标记为处理中，但不禁用按钮（这样仍能接收鼠标事件）
-        btn._isProcessing = true;
+        if (manager.isProcessing()) return;
+        manager.cleanup();
+        manager.setProcessing(true);
         
         try {
             await navigator.clipboard.writeText(text);
-            
-            // 成功反馈
-            const originalIcon = btnIcon.textContent;
-            const originalText = btnText.textContent;
-            
-            btnIcon.textContent = '✓';
-            btnText.textContent = '已复制';
-            btn.classList.add('success');
-            
-            // 恢复函数
-            const restore = () => {
-                btnIcon.textContent = originalIcon;
-                btnText.textContent = originalText;
-                btn.classList.remove('success');
-                btn._isProcessing = false;
-                btn._restoreTimeout = null;
-                if (btn._mouseEnterHandler) {
-                    btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
-                    btn._mouseEnterHandler = null;
-                }
-            };
-            
-            // 鼠标悬停时立即恢复
-            btn._mouseEnterHandler = () => {
-                if (btn._restoreTimeout) {
-                    clearTimeout(btn._restoreTimeout);
-                    btn._restoreTimeout = null;
-                }
-                restore();
-            };
-            btn.addEventListener('mouseenter', btn._mouseEnterHandler);
-            
-            // 1.2秒后恢复
-            btn._restoreTimeout = setTimeout(() => {
-                restore();
-            }, 1200);
+            manager.showFeedback('✓', '已复制', true);
         } catch (err) {
             console.error('[Gemini Export] Copy failed:', err);
-            // 失败反馈
-            const originalIcon = btnIcon.textContent;
-            const originalText = btnText.textContent;
-            
-            btnIcon.textContent = '✗';
-            btnText.textContent = '复制失败';
-            
-            // 恢复函数
-            const restore = () => {
-                btnIcon.textContent = originalIcon;
-                btnText.textContent = originalText;
-                btn._isProcessing = false;
-                btn._restoreTimeout = null;
-                if (btn._mouseEnterHandler) {
-                    btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
-                    btn._mouseEnterHandler = null;
-                }
-            };
-            
-            // 鼠标悬停时立即恢复
-            btn._mouseEnterHandler = () => {
-                if (btn._restoreTimeout) {
-                    clearTimeout(btn._restoreTimeout);
-                    btn._restoreTimeout = null;
-                }
-                restore();
-            };
-            btn.addEventListener('mouseenter', btn._mouseEnterHandler);
-            
-            // 1.2秒后恢复
-            btn._restoreTimeout = setTimeout(() => {
-                restore();
-            }, 1200);
+            manager.showFeedback('✗', '复制失败', false);
         }
     }
 
@@ -1310,24 +1221,11 @@
         const btn = document.getElementById('gemini-download');
         const btnIcon = btn.querySelector('.btn-icon');
         const btnText = btn.querySelector('.btn-text');
+        const manager = createButtonStateManager(btn, btnIcon, btnText);
         
-        // 如果正在处理中，直接返回
-        if (btn._isProcessing) return;
-        
-        // 如果已经有恢复定时器，清除它
-        if (btn._restoreTimeout) {
-            clearTimeout(btn._restoreTimeout);
-            btn._restoreTimeout = null;
-        }
-        
-        // 如果已经有鼠标进入事件处理器，清除它
-        if (btn._mouseEnterHandler) {
-            btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
-            btn._mouseEnterHandler = null;
-        }
-        
-        // 标记为处理中，但不禁用按钮（这样仍能接收鼠标事件）
-        btn._isProcessing = true;
+        if (manager.isProcessing()) return;
+        manager.cleanup();
+        manager.setProcessing(true);
         
         try {
             const blob = new Blob([text], { type: 'text/markdown' });
@@ -1337,100 +1235,50 @@
             a.download = `Gemini_Export_${Date.now()}.md`;
             a.click();
             URL.revokeObjectURL(url);
-            
-            // 成功反馈
-            const originalIcon = btnIcon.textContent;
-            const originalText = btnText.textContent;
-            
-            btnIcon.textContent = '✓';
-            btnText.textContent = '已下载';
-            btn.classList.add('success');
-            
-            // 恢复函数
-            const restore = () => {
-                btnIcon.textContent = originalIcon;
-                btnText.textContent = originalText;
-                btn.classList.remove('success');
-                btn._isProcessing = false;
-                btn._restoreTimeout = null;
-                if (btn._mouseEnterHandler) {
-                    btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
-                    btn._mouseEnterHandler = null;
-                }
-            };
-            
-            // 鼠标悬停时立即恢复
-            btn._mouseEnterHandler = () => {
-                if (btn._restoreTimeout) {
-                    clearTimeout(btn._restoreTimeout);
-                    btn._restoreTimeout = null;
-                }
-                restore();
-            };
-            btn.addEventListener('mouseenter', btn._mouseEnterHandler);
-            
-            // 1.2秒后恢复
-            btn._restoreTimeout = setTimeout(() => {
-                restore();
-            }, 1200);
+            manager.showFeedback('✓', '已下载', true);
         } catch (err) {
             console.error('[Gemini Export] Download failed:', err);
-            // 失败反馈
-            const originalIcon = btnIcon.textContent;
-            const originalText = btnText.textContent;
-            
-            btnIcon.textContent = '✗';
-            btnText.textContent = '下载失败';
-            
-            // 恢复函数
-            const restore = () => {
-                btnIcon.textContent = originalIcon;
-                btnText.textContent = originalText;
-                btn._isProcessing = false;
-                btn._restoreTimeout = null;
-                if (btn._mouseEnterHandler) {
-                    btn.removeEventListener('mouseenter', btn._mouseEnterHandler);
-                    btn._mouseEnterHandler = null;
-                }
-            };
-            
-            // 鼠标悬停时立即恢复
-            btn._mouseEnterHandler = () => {
-                if (btn._restoreTimeout) {
-                    clearTimeout(btn._restoreTimeout);
-                    btn._restoreTimeout = null;
-                }
-                restore();
-            };
-            btn.addEventListener('mouseenter', btn._mouseEnterHandler);
-            
-            // 1.2秒后恢复
-            btn._restoreTimeout = setTimeout(() => {
-                restore();
-            }, 1200);
+            manager.showFeedback('✗', '下载失败', false);
         }
     }
 
+    // --- 初始化 ---
     function init() {
         injectUI();
         const history = document.querySelector(CONFIG.SELECTORS.history);
         if (history) {
-            history.addEventListener('scroll', () => { if (state.sidebar?.classList.contains('open')) requestAnimationFrame(syncCheckboxes); }, { passive: true });
+            history.addEventListener('scroll', () => {
+                if (state.sidebar?.classList.contains('open')) {
+                    requestAnimationFrame(syncCheckboxes);
+                }
+            }, { passive: true });
+            
             if (state.observer) state.observer.disconnect();
-            state.observer = new MutationObserver(() => { if (state.sidebar?.classList.contains('open')) syncCheckboxes(); });
+            state.observer = new MutationObserver(() => {
+                if (state.sidebar?.classList.contains('open')) {
+                    syncCheckboxes();
+                }
+            });
             state.observer.observe(history, { childList: true, subtree: true });
         }
         
-        // 确保主题已更新
-        setTimeout(updateTheme, 100);
+        setTimeout(updateTheme, CONFIG.TIMING.THEME_UPDATE_DELAY);
     }
 
     setInterval(() => {
         if (state.lastUrl !== location.href) {
-            state.lastUrl = location.href; state.selectedMessages.clear();
-            const col = document.getElementById('export-cb-column'); if (col) col.innerHTML = ''; 
-            updatePreview(); setTimeout(init, 1000);
+            state.lastUrl = location.href;
+            state.selectedMessages.clear();
+            const col = document.getElementById('export-cb-column');
+            if (col) col.innerHTML = '';
+            updatePreview();
+            setTimeout(init, CONFIG.TIMING.INIT_DELAY);
         }
-    }, 1500);
-    if (document.readyState === 'complete') init(); else window.addEventListener('load', init);
+    }, CONFIG.TIMING.URL_CHECK_INTERVAL);
+    
+    if (document.readyState === 'complete') {
+        init();
+    } else {
+        window.addEventListener('load', init);
+    }
 })();
