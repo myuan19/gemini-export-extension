@@ -1077,10 +1077,6 @@
         // 使用 html-to-markdown.js 中的合并函数
         const result = HTMLToMarkdown.mergeMessagesToMarkdown(messages, CONFIG.SELECTORS);
         
-        // 调试：输出最终文本（展示在侧边栏的）
-        console.log('[Gemini Export] ========== 最终文本（侧边栏展示） ==========');
-        console.log(result);
-        
         return result;
     }
 

@@ -1,0 +1,92 @@
+为了帮助你进行更全面的解析测试，我生成了一段包含**极端缩进、混合语法、Windows 绝对路径、以及紧凑文字环绕**的示例。这段代码模拟了一个复杂的跨平台部署脚本。
+
+
+---
+
+
+### 综合解析测试：多协议部署脚本
+
+
+本段落用于测试解析器对复杂嵌套结构（不含引用块）的容错能力。
+
+
+1. **全局配置初始化**
+   首先，系统需要检查本地环境。路径中可能包含空格和特殊字符：
+   `C:\Program Files (x86)\Common Files\Test_Suite\config.ini`
+   确认路径后，执行以下基础检查：
+
+   ```python
+   import os
+   # 模拟 Windows 路径处理
+   def check_env():
+       base_path = r"C:\Users\Admin\AppData\Local\Temp"
+       print(f"Checking path: {base_path}")
+       return os.path.exists(base_path)
+   ```
+
+    *上述 Python 代码块之后紧跟此段斜体说明，用于测试块后文本识别。*
+
+2. **多层级任务分发逻辑**
+
+   - **网络探测阶段**
+     在这一步，我们进入二级缩进，测试列表内嵌套的代码表现：
+
+     1. **内部 API 校验**
+        发送一个简单的 GET 请求。注意代码块前的路径说明：
+        配置文件位于 `D:\Deploy\Nodes\v2.4.0\server.conf`。
+
+         ```bash
+         curl -X GET "https://api.internal.service/health" -H "Accept: application/json"
+         ```
+
+        此代码块前后均有紧凑的列表文字。
+
+     2. **本地持久化测试**
+        如果网络校验通过，将数据写入以下目录：
+        `C:\Windows\System32\drivers\etc\hosts.backup`
+
+        ```json
+        {
+          "operation": "backup",
+          "status": "pending",
+          "timestamp": "2026-01-01T08:00:00Z"
+        }
+        ```
+
+        *注意：JSON 格式中的双引号与 Windows 路径的反斜杠不应冲突。*
+
+3. **异常处理表格**
+
+   | **错误代码** | **匹配路径**    | **优先级** |
+   | ------------ | --------------- | ---------- |
+   | `ERR_01`     | `C:\Log\Error\` | **高**     |
+   | `WRN_02`     | `D:\Temp\Warn\` | *低*       |
+
+4. **底层驱动调用 (C++)**
+   最后是一段带有深层逻辑的代码，用于测试复杂字符：
+
+   ```c++
+   #include <iostream>
+   int main() {
+       // 测试 Windows 路径字符串转义
+       const char* path = "C:\\Windows\\System32\\";
+       std::cout << "Target: " << path << std::endl;
+       return 0;
+   ```
+
+ 	这段文字是整个测试文档的末尾，确保解析器能正确关闭所有标签。
+
+
+---
+
+
+**本次生成的测试要点：**
+
+
+- **路径解析**：包含了 `C:\Program Files (x86)\` 等带有空格、括号和反斜杠的路径。
+- **紧凑布局**：代码块的前一行和后一行都有紧贴的文字，测试是否会发生“粘连”。
+- **多语言混合**：涵盖了 Python, Bash, JSON, C++, Powershell (行内) 的语法高亮。
+- **嵌套深度**：数字列表嵌套圆点列表，圆点列表再内嵌代码块。
+
+
+你需要我针对这段代码生成对应的 **正则表达式建议** 来提取其中的路径或代码块吗？
