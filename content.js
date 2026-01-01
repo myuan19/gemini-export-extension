@@ -87,108 +87,12 @@
         return messageElement;
     }
 
-    // --- 获取复制按钮内容 ---
-    function getCopyButtonContent(messageElement) {
-        try {
-            const copyButton = findCopyButton(messageElement);
-            if (!copyButton) return null;
-            
-            const contentElement = getContentElement(messageElement);
-            if (!contentElement) return null;
-            
-            const clone = contentElement.cloneNode(true);
-            clone.querySelectorAll('button, .icon, svg, img, .mat-mdc-button-touch-target').forEach(el => el.remove());
-            return nodeToText(clone);
-        } catch (e) {
-            console.error('[Gemini Export] Failed to get copy button content:', e);
-            return null;
-        }
-    }
-
-    // --- 核心逻辑：深度 DOM 转 Markdown 解析器 ---
-    function nodeToText(node) {
-        if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
-        if (node.nodeType !== Node.ELEMENT_NODE) return '';
-
-        const tagName = node.tagName.toLowerCase();
-        const getChildrenText = (n) => Array.from(n.childNodes).map(nodeToText).join('');
-
-        switch (tagName) {
-            case 'pre': {
-                const code = node.querySelector('code');
-                const isInListItem = node.closest('li') !== null;
-                const indent = isInListItem ? '    ' : '';
-                
-                if (code) {
-                    const lang = code.className.match(/language-(\w+)/)?.[1] || '';
-                    const codeText = (code.textContent || '').replace(/\s+$/, '') + '\n';
-                    return `${indent}\`\`\`${lang}\n${codeText}${indent}\`\`\`\n`;
-                }
-                return `${indent}\`\`\`\n${node.textContent.trim()}\n${indent}\`\`\`\n`;
-            }
-
-            case 'code':
-                if (node.parentElement?.tagName.toLowerCase() !== 'pre') {
-                    return ` \`${node.textContent.trim()}\` `;
-                }
-                return node.textContent;
-
-            case 'br': 
-                return '\n';
-            
-            case 'strong': 
-            case 'b': 
-                return `**${getChildrenText(node).trim()}**`;
-            
-            case 'em': 
-            case 'i': 
-                return `*${getChildrenText(node).trim()}*`;
-            
-            case 'h1': 
-            case 'h2': 
-            case 'h3': 
-            case 'h4': 
-            case 'h5': 
-            case 'h6': {
-                const level = parseInt(tagName[1]);
-                return `\n${'#'.repeat(level)} ${getChildrenText(node).trim()}\n\n`;
-            }
-            
-            case 'ol': {
-                const items = [];
-                Array.from(node.childNodes).forEach((child, i) => {
-                    if (child.nodeType === 1 && child.tagName.toLowerCase() === 'li') {
-                        items.push(`${i + 1}. ${getChildrenText(child).replace(/^\s+/, '').replace(/\n+$/, '')}`);
-                    }
-                });
-                return `\n${items.join('\n')}\n\n`;
-            }
-            
-            case 'ul': {
-                const items = [];
-                Array.from(node.childNodes).forEach(child => {
-                    if (child.nodeType === 1 && child.tagName.toLowerCase() === 'li') {
-                        items.push(`- ${getChildrenText(child).replace(/^\s+/, '').replace(/\n+$/, '')}`);
-                    }
-                });
-                return `\n${items.join('\n')}\n\n`;
-            }
-            
-            case 'li':
-                return getChildrenText(node).replace(/^\n+/, '').replace(/\n+$/, '');
-            
-            case 'blockquote':
-                return `\n> ${getChildrenText(node).trim().replace(/\n/g, '\n> ')}\n\n`;
-            
-            case 'p':
-            case 'div': {
-                const isBlock = ['p', 'div'].includes(tagName);
-                return `${isBlock ? '\n' : ''}${getChildrenText(node)}${isBlock ? '\n' : ''}`;
-            }
-            
-            default:
-                return getChildrenText(node);
-        }
+    // --- 统一文本处理：从消息元素到最终 Markdown ---
+    // 使用 html-to-markdown.js 工具模块
+    const HTMLToMarkdown = window.HTMLToMarkdown;
+    
+    if (!HTMLToMarkdown) {
+        console.error('[Gemini Export] HTMLToMarkdown module not loaded!');
     }
 
     // --- 主题检测与更新 ---
@@ -591,7 +495,7 @@
                     <button class="gemini-btn-small" id="scroll-to-top-btn" title="滚动到顶部">⬆️</button>
                 </div>
             </div>
-            <div class="gemini-preview" id="gemini-md-preview">请在左侧勾选消息进行导出...</div>
+            <div class="gemini-preview" id="gemini-md-preview"><pre id="gemini-md-preview-pre">请在左侧勾选消息进行导出...</pre></div>
             <div class="gemini-footer">
                 <button class="gemini-btn" id="gemini-download">
                     <span class="btn-icon">⬇️</span>
@@ -1148,54 +1052,65 @@
         });
     }
 
-    function updatePreview() {
-        const preview = document.getElementById('gemini-md-preview');
+    /**
+     * 获取最终的 Markdown 文本（统一入口）
+     * @returns {string} - 处理后的最终 Markdown 文本
+     */
+    function getFinalMarkdown() {
+        if (!HTMLToMarkdown) {
+            console.error('[Gemini Export] HTMLToMarkdown not available');
+            return '';
+        }
+        
         const sortedIndices = Array.from(state.selectedMessages).sort((a, b) => a - b);
-        const items = [];
+        const messages = [];
 
+        // 收集所有选中的消息
         sortedIndices.forEach((idx) => {
             const el = document.querySelector(`[data-export-idx="${idx}"]`);
             if (!el) return;
             
             const isUser = el.tagName === 'USER-QUERY';
-            const roleName = isUser ? 'You' : 'Gemini';
-            let text = getCopyButtonContent(el);
-            
-            if (!text || !text.trim()) {
-                const contentEl = el.querySelector(isUser ? CONFIG.SELECTORS.content.user : CONFIG.SELECTORS.content.model) || el;
-                const clone = contentEl.cloneNode(true);
-                clone.querySelectorAll('button, .icon, svg, mat-icon').forEach(n => n.remove());
-                text = nodeToText(clone);
-            }
-            
-            if (text && text.trim()) {
-                let processedText = text.trim();
-                
-                processedText = processedText.replace(/([A-Za-z][A-Za-z0-9\s]*?)\s*\n+(\s*)```\s*\n([\s\S]*?)\n(\s*)```/g, (match, langName, indentBefore, code, indentAfter) => {
-                    const lang = langName.trim().replace(/\s+/g, '').toLowerCase();
-                    const indent = indentBefore || indentAfter || '';
-                    return `${indent}\`\`\`${lang}\n${code.trim()}\n${indent}\`\`\``;
-                });
-                
-                processedText = processedText.replace(/([ \t]*)```(\w+)?\n([\s\S]*?)\n([ \t]*)```/g, (match, indentBefore, lang, code, indentAfter) => {
-                    const indent = (indentBefore || indentAfter || '').replace(/[\n\r]/g, '');
-                    return `${indent}\`\`\`${lang || ''}\n${code.trim()}\n${indent}\`\`\``;
-                });
-                
-                items.push(`**${roleName}:**\n\n${processedText}`);
-            }
+            messages.push({ element: el, isUser });
         });
 
-        const finalMarkdown = items.join('\n\n---\n\n');
-        preview.textContent = finalMarkdown
-            .replace(/[ \t]+$/gm, '') 
-            .replace(/\n{3,}/g, '\n\n')
-            .trim() || "请勾选消息以开始导出";
+        // 使用 html-to-markdown.js 中的合并函数
+        const result = HTMLToMarkdown.mergeMessagesToMarkdown(messages, CONFIG.SELECTORS);
+        
+        // 调试：输出最终文本（展示在侧边栏的）
+        console.log('[Gemini Export] ========== 最终文本（侧边栏展示） ==========');
+        console.log(result);
+        
+        return result;
+    }
+
+    function updatePreview() {
+        if (!HTMLToMarkdown) {
+            console.error('[Gemini Export] HTMLToMarkdown not available');
+            return;
+        }
+        
+        const preview = document.getElementById('gemini-md-preview-pre') || document.getElementById('gemini-md-preview');
+        const cleaned = getFinalMarkdown();
+        const text = cleaned || "请勾选消息以开始导出";
+        
+        // 使用 html-to-markdown.js 中的转义函数
+        const escaped = HTMLToMarkdown.escapeHtmlForPreview(text);
+        
+        if (preview && preview.tagName === 'PRE') {
+            preview.innerHTML = escaped;
+        } else {
+            // 如果不是 <pre>，确保使用 <pre> 标签
+            const container = document.getElementById('gemini-md-preview');
+            if (container) {
+                container.innerHTML = '<pre id="gemini-md-preview-pre">' + escaped + '</pre>';
+            }
+        }
     }
 
     // --- 导出功能 ---
     async function handleCopy() {
-        const text = document.getElementById('gemini-md-preview').textContent;
+        const text = getFinalMarkdown();
         if (!text || text.startsWith("请勾选")) return;
         
         const manager = setupExportButton('gemini-copy');
@@ -1211,7 +1126,7 @@
     }
 
     function handleDownload() {
-        const text = document.getElementById('gemini-md-preview').textContent;
+        const text = getFinalMarkdown();
         if (!text || text.startsWith("请勾选")) return;
         
         const manager = setupExportButton('gemini-download');
