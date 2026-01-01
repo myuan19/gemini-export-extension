@@ -147,7 +147,7 @@
                     // 列表项中的代码块：和段落使用相同的缩进
                     const indent = getIndent(depth);
                     const indentedCode = codeText.split('\n').map(line => indent + line).join('\n');
-                    return `\n${indent}\n${indent}\`\`\`${langPart}\n${indentedCode}\n${indent}\`\`\`\n${indent}\n`;
+                    return `\n${indent}\n${indent}\`\`\`${langPart}\n${indentedCode}\n${indent}\`\`\`\n`;
                 } else {
                     // 非列表中的代码块
                     return `\n\`\`\`${langPart}\n${codeText}\n\`\`\`\n\n`;
@@ -343,7 +343,8 @@
                                 }
                                 
                                 if (hasCodeBlockBefore) {
-                                    content += `\n\n${indent}${paraText}`;
+                                    // 代码块后的段落，只添加一个换行，避免过多空行
+                                    content += `\n${indent}${paraText}`;
                                 } else {
                                     content += `\n\n${indent}${paraText}`;
                                 }
@@ -411,7 +412,8 @@
                         }
                         
                         if (hasCodeBlockBefore) {
-                            return `\n${indent}\n${indent}${text.trim()}`;
+                            // 代码块后的段落，只添加一个换行和缩进，避免过多空行
+                            return `\n${indent}${text.trim()}`;
                         }
                         
                         if (isFirstPara) {

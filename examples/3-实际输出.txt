@@ -22,8 +22,6 @@
        return os.path.exists(base_path)
    ```
 
-
-
    *上述 Python 代码块之后紧跟此段斜体说明，用于测试块后文本识别。*
 2. **多层级任务分发逻辑**
    - **网络探测阶段**
@@ -35,8 +33,6 @@
          ```bash
          curl -X GET "https://api.internal.service/health" -H "Accept: application/json"
          ```
-
-
 
          此代码块前后均有紧凑的列表文字。
       2. **本地持久化测试**
@@ -50,8 +46,6 @@
            "timestamp": "2026-01-01T08:00:00Z"
          }
          ```
-
-
 
          *注意：JSON 格式中的双引号与 Windows 路径的反斜杠不应冲突。*
 3. **异常处理表格**
@@ -74,8 +68,6 @@
        return 0;
    }
    ```
-
-
 
    这段文字是整个测试文档的末尾，确保解析器能正确关闭所有标签。
 
