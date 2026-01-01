@@ -159,8 +159,8 @@
             .cb-input { width: 18px; height: 18px; cursor: pointer; accent-color: #1a73e8; }
             #export-trigger { 
                 position: fixed; 
-                width: 56px; 
-                height: 56px; 
+                width: 44px; 
+                height: 44px; 
                 border-radius: 50%; 
                 background: #1a73e8; 
                 color: white; 
@@ -168,13 +168,13 @@
                 cursor: move; 
                 box-shadow: 0 4px 12px rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.1); 
                 font-weight: 600; 
-                font-size: 12px;
+                font-size: 10px;
                 z-index: 2147483645;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 user-select: none;
-                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s;
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s, border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 padding: 0;
             }
             #export-trigger:active {
@@ -184,31 +184,39 @@
                 cursor: grabbing;
                 transition: none;
             }
+            /* 左侧贴合：左侧方形，右侧圆形 */
             #export-trigger.collapsed-left {
                 left: 0 !important;
-                transform: translateX(calc(-100% + 20px));
+                transform: translateX(calc(-100% + 18px));
+                border-radius: 0 50% 50% 0;
             }
             #export-trigger.collapsed-left:hover {
                 transform: translateX(0) scale(1.1);
             }
+            /* 右侧贴合：右侧方形，左侧圆形 */
             #export-trigger.collapsed-right {
                 left: auto !important;
-                transform: translateX(calc(100% - 20px));
+                transform: translateX(calc(100% - 18px));
+                border-radius: 50% 0 0 50%;
             }
             #export-trigger.collapsed-right:hover {
                 transform: translateX(0) scale(1.1);
             }
+            /* 上方贴合：上方方形，下方圆形 */
             #export-trigger.collapsed-top {
                 top: 0 !important;
-                transform: translateY(calc(-100% + 20px));
+                transform: translateY(calc(-100% + 18px));
+                border-radius: 0 0 50% 50%;
             }
             #export-trigger.collapsed-top:hover {
                 transform: translateY(0) scale(1.1);
             }
+            /* 下方贴合：下方方形，上方圆形 */
             #export-trigger.collapsed-bottom {
                 bottom: 0 !important;
                 top: auto !important;
-                transform: translateY(calc(100% - 20px));
+                transform: translateY(calc(100% - 18px));
+                border-radius: 50% 50% 0 0;
             }
             #export-trigger.collapsed-bottom:hover {
                 transform: translateY(0) scale(1.1);
@@ -246,7 +254,7 @@
 
         const trigger = document.createElement('button');
         trigger.id = 'export-trigger';
-        trigger.innerHTML = '<span style="line-height:1; font-size:20px;">📄</span>';
+        trigger.innerHTML = '<span style="line-height:1; font-size:18px;">📄</span>';
         trigger.title = '导出 Markdown';
         document.body.appendChild(trigger);
 
@@ -331,10 +339,60 @@
             const saved = localStorage.getItem('gemini-export-trigger-position');
             if (saved) {
                 const pos = JSON.parse(saved);
-                trigger.style.left = pos.left + 'px';
-                trigger.style.top = pos.top + 'px';
-                trigger.style.right = 'auto';
-                trigger.style.bottom = 'auto';
+                
+                // 恢复位置
+                // 优先使用 right/bottom（靠边时通常使用这些）
+                if (pos.right !== undefined || pos.bottom !== undefined) {
+                    if (pos.right !== undefined) {
+                        trigger.style.right = pos.right + 'px';
+                        trigger.style.left = 'auto';
+                    }
+                    if (pos.bottom !== undefined) {
+                        trigger.style.bottom = pos.bottom + 'px';
+                        trigger.style.top = 'auto';
+                    }
+                    // 如果只有 right 或 bottom，另一个方向使用 left/top（如果存在）
+                    if (pos.left !== undefined && pos.right === undefined) {
+                        trigger.style.left = pos.left + 'px';
+                    }
+                    if (pos.top !== undefined && pos.bottom === undefined) {
+                        trigger.style.top = pos.top + 'px';
+                    }
+                } else if (pos.left !== undefined || pos.top !== undefined) {
+                    // 使用 left/top 定位
+                    if (pos.left !== undefined) {
+                        trigger.style.left = pos.left + 'px';
+                        trigger.style.right = 'auto';
+                    }
+                    if (pos.top !== undefined) {
+                        trigger.style.top = pos.top + 'px';
+                        trigger.style.bottom = 'auto';
+                    }
+                }
+                
+                // 恢复贴边状态
+                if (pos.collapsed) {
+                    trigger.classList.remove('collapsed-left', 'collapsed-right', 'collapsed-top', 'collapsed-bottom');
+                    trigger.classList.add(pos.collapsed);
+                    
+                    // 根据贴边状态设置 border-radius
+                    switch(pos.collapsed) {
+                        case 'collapsed-left':
+                            trigger.style.borderRadius = '0 50% 50% 0';
+                            break;
+                        case 'collapsed-right':
+                            trigger.style.borderRadius = '50% 0 0 50%';
+                            break;
+                        case 'collapsed-top':
+                            trigger.style.borderRadius = '0 0 50% 50%';
+                            break;
+                        case 'collapsed-bottom':
+                            trigger.style.borderRadius = '50% 50% 0 0';
+                            break;
+                    }
+                } else {
+                    trigger.style.borderRadius = '50%';
+                }
             } else {
                 // 默认位置：右下角
                 trigger.style.right = '30px';
@@ -349,10 +407,57 @@
     function saveTriggerPosition(trigger) {
         try {
             const rect = trigger.getBoundingClientRect();
-            const pos = {
-                left: rect.left,
-                top: rect.top
-            };
+            const pos = {};
+            
+            // 保存位置信息
+            const leftValue = trigger.style.left;
+            const topValue = trigger.style.top;
+            const rightValue = trigger.style.right;
+            const bottomValue = trigger.style.bottom;
+            
+            // 使用更严格的检查，确保 0 值也能被保存
+            if (leftValue && leftValue !== 'auto' && leftValue !== '') {
+                const leftNum = parseFloat(leftValue);
+                if (!isNaN(leftNum)) {
+                    pos.left = leftNum;
+                }
+            }
+            if (topValue && topValue !== 'auto' && topValue !== '') {
+                const topNum = parseFloat(topValue);
+                if (!isNaN(topNum)) {
+                    pos.top = topNum;
+                }
+            }
+            if (rightValue && rightValue !== 'auto' && rightValue !== '') {
+                const rightNum = parseFloat(rightValue);
+                if (!isNaN(rightNum)) {
+                    pos.right = rightNum;  // 包括 0 值
+                }
+            }
+            if (bottomValue && bottomValue !== 'auto' && bottomValue !== '') {
+                const bottomNum = parseFloat(bottomValue);
+                if (!isNaN(bottomNum)) {
+                    pos.bottom = bottomNum;  // 包括 0 值
+                }
+            }
+            
+            // 如果没有明确的定位值，使用 getBoundingClientRect 的位置
+            if (pos.left === undefined && pos.right === undefined && pos.top === undefined && pos.bottom === undefined) {
+                pos.left = rect.left;
+                pos.top = rect.top;
+            }
+            
+            // 保存贴边状态
+            if (trigger.classList.contains('collapsed-left')) {
+                pos.collapsed = 'collapsed-left';
+            } else if (trigger.classList.contains('collapsed-right')) {
+                pos.collapsed = 'collapsed-right';
+            } else if (trigger.classList.contains('collapsed-top')) {
+                pos.collapsed = 'collapsed-top';
+            } else if (trigger.classList.contains('collapsed-bottom')) {
+                pos.collapsed = 'collapsed-bottom';
+            }
+            
             localStorage.setItem('gemini-export-trigger-position', JSON.stringify(pos));
         } catch (e) {
             console.error('[Gemini Export] Failed to save trigger position:', e);
