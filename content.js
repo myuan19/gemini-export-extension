@@ -53,7 +53,9 @@
             startY: undefined,
             startLeft: 0,
             startTop: 0
-        }
+        },
+        scrollLocked: false,
+        savedScrollPosition: { top: 0, left: 0 }
     };
 
     // --- 工具函数 ---
@@ -514,6 +516,20 @@
             const isOpen = sidebar.classList.toggle('open');
             document.body.classList.toggle('export-open', isOpen);
             
+            const history = document.querySelector(CONFIG.SELECTORS.history);
+            
+            if (isOpen) {
+                // 展开时：锁定滚动
+                if (history) {
+                    lockScroll(history);
+                }
+            } else {
+                // 收起时：解锁滚动（如果被锁定）
+                if (history && state.scrollLocked) {
+                    unlockScroll(history);
+                }
+            }
+            
             const mainContainers = [
                 document.querySelector('main'),
                 document.querySelector('[role="main"]'),
@@ -567,7 +583,21 @@
                 }, CONFIG.TIMING.TRANSITION_DURATION);
             }, CONFIG.TIMING.POSITION_UPDATE_DELAY);
             
-            if (isOpen) syncCheckboxes();
+            if (isOpen) {
+                // 延迟执行 syncCheckboxes，等待 DOM 渲染完成
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        syncCheckboxes();
+                        // syncCheckboxes 完成后解锁滚动
+                        if (history) {
+                            // 再等待一帧确保所有操作完成
+                            requestAnimationFrame(() => {
+                                unlockScroll(history);
+                            });
+                        }
+                    });
+                });
+            }
         };
 
         const scrollToTop = () => {
@@ -944,6 +974,35 @@
         document.addEventListener('touchend', () => handleDragEnd(trigger));
     }
 
+    // --- 滚动锁定功能 ---
+    function lockScroll(history) {
+        if (!history || state.scrollLocked) return;
+        
+        state.scrollLocked = true;
+        state.savedScrollPosition.top = history.scrollTop;
+        state.savedScrollPosition.left = history.scrollLeft;
+        
+        // 禁用滚动：设置 overflow: hidden
+        history.style.overflow = 'hidden';
+        history.style.pointerEvents = 'none';
+    }
+
+    function unlockScroll(history) {
+        if (!history || !state.scrollLocked) return;
+        
+        state.scrollLocked = false;
+        
+        // 恢复滚动
+        history.style.overflow = '';
+        history.style.pointerEvents = '';
+        
+        // 恢复滚动位置
+        requestAnimationFrame(() => {
+            history.scrollTop = state.savedScrollPosition.top;
+            history.scrollLeft = state.savedScrollPosition.left;
+        });
+    }
+
     // --- 选择功能 ---
     function getCheckboxColumn() {
         const history = document.querySelector(CONFIG.SELECTORS.history);
@@ -1019,6 +1078,12 @@
     function syncCheckboxes() {
         const history = document.querySelector(CONFIG.SELECTORS.history);
         if (!history) return;
+        
+        // 如果滚动被锁定，保存当前滚动位置（防止在锁定期间位置变化）
+        if (state.scrollLocked) {
+            state.savedScrollPosition.top = history.scrollTop;
+            state.savedScrollPosition.left = history.scrollLeft;
+        }
         
         const column = getCheckboxColumn();
         if (!column) return;
@@ -1149,6 +1214,9 @@
         const history = document.querySelector(CONFIG.SELECTORS.history);
         if (history) {
             history.addEventListener('scroll', () => {
+                // 如果滚动被锁定，忽略滚动事件
+                if (state.scrollLocked) return;
+                
                 if (state.sidebar?.classList.contains('open')) {
                     requestAnimationFrame(syncCheckboxes);
                 }
@@ -1156,6 +1224,9 @@
             
             if (state.observer) state.observer.disconnect();
             state.observer = new MutationObserver(() => {
+                // 如果滚动被锁定，忽略 MutationObserver 回调
+                if (state.scrollLocked) return;
+                
                 if (state.sidebar?.classList.contains('open')) {
                     syncCheckboxes();
                 }
