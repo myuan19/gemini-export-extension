@@ -140,6 +140,10 @@
         style.textContent = `
             #gemini-export-sidebar { position: fixed; top: 0; right: 0; width: ${CONFIG.SIDEBAR_WIDTH}px; height: 100vh; background: #fff; box-shadow: -2px 0 10px rgba(0,0,0,0.1); z-index: 2147483647; transform: translateX(100%); transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; font-family: -apple-system, sans-serif; }
             #gemini-export-sidebar.open { transform: translateX(0); }
+            body.export-open { margin-right: ${CONFIG.SIDEBAR_WIDTH}px !important; transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+            body.export-open > *:not(#gemini-export-sidebar):not(#export-trigger) { 
+                transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
             .gemini-header { padding: 16px; border-bottom: 1px solid #e0e0e0; background: #f8f9fa; display: flex; flex-direction: column; gap: 12px; }
             .gemini-header-top { display: flex; justify-content: space-between; align-items: center; }
             .gemini-header-actions { display: flex; gap: 8px; }
@@ -188,7 +192,6 @@
                 transform: translateX(0) scale(1.1);
             }
             #export-trigger.collapsed-right {
-                right: 0 !important;
                 left: auto !important;
                 transform: translateX(calc(100% - 20px));
             }
@@ -257,6 +260,57 @@
         const toggleSidebar = () => {
             const isOpen = sb.classList.toggle('open');
             document.body.classList.toggle('export-open', isOpen);
+            
+            // 调整页面主容器的布局，确保内容被推开
+            const mainContainers = [
+                document.querySelector('main'),
+                document.querySelector('[role="main"]'),
+                document.querySelector('.main-container'),
+                document.querySelector('#main-content'),
+                document.body.firstElementChild
+            ].filter(el => el && el !== sb && el !== trigger);
+            
+            mainContainers.forEach(container => {
+                if (isOpen) {
+                    container.style.marginRight = `${CONFIG.SIDEBAR_WIDTH}px`;
+                    container.style.transition = 'margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+                } else {
+                    container.style.marginRight = '';
+                }
+            });
+            
+            // 调整小球位置，确保它跟随页面内容移动
+            setTimeout(() => {
+                const rect = trigger.getBoundingClientRect();
+                const isCollapsedRight = trigger.classList.contains('collapsed-right');
+                const currentRight = trigger.style.right;
+                const distanceToWindowRight = window.innerWidth - rect.right;
+                
+                if (isOpen) {
+                    // 侧边栏打开时
+                    if (isCollapsedRight || (currentRight && parseFloat(currentRight) < 50) || distanceToWindowRight < 50) {
+                        // 小球在右侧边缘附近，调整到可视区域右边缘
+                        trigger.style.right = `${CONFIG.SIDEBAR_WIDTH}px`;
+                        trigger.style.left = 'auto';
+                        if (!isCollapsedRight) {
+                            trigger.classList.add('collapsed-right');
+                        }
+                    }
+                } else {
+                    // 侧边栏关闭时
+                    if (isCollapsedRight) {
+                        // 如果小球贴合在可视区域右边缘，调整回浏览器窗口右边缘
+                        trigger.style.right = '0';
+                        trigger.style.left = 'auto';
+                    } else if (currentRight && parseFloat(currentRight) === CONFIG.SIDEBAR_WIDTH) {
+                        // 如果小球原本在可视区域右边缘，调整回浏览器窗口右边缘
+                        trigger.style.right = '0';
+                        trigger.style.left = 'auto';
+                        trigger.classList.add('collapsed-right');
+                    }
+                }
+            }, 50);
+            
             if (isOpen) syncCheckboxes();
         };
         
@@ -375,9 +429,14 @@
             let newLeft = state.dragState.startLeft + deltaX;
             let newTop = state.dragState.startTop + deltaY;
             
-            // 限制在视窗内
-            const maxLeft = window.innerWidth - trigger.offsetWidth;
-            const maxTop = window.innerHeight - trigger.offsetHeight;
+            // 计算实际可视区域（考虑侧边栏是否打开）
+            const sidebarOpen = document.body.classList.contains('export-open');
+            const visibleWidth = sidebarOpen ? window.innerWidth - CONFIG.SIDEBAR_WIDTH : window.innerWidth;
+            const visibleHeight = window.innerHeight;
+            
+            // 限制在可视区域内
+            const maxLeft = visibleWidth - trigger.offsetWidth;
+            const maxTop = visibleHeight - trigger.offsetHeight;
             
             newLeft = Math.max(0, Math.min(newLeft, maxLeft));
             newTop = Math.max(0, Math.min(newTop, maxTop));
@@ -390,12 +449,12 @@
             // 移除之前的缩进类
             trigger.classList.remove('collapsed-left', 'collapsed-right', 'collapsed-top', 'collapsed-bottom');
             
-            // 边缘检测和自动贴合
+            // 边缘检测和自动贴合（使用实际可视区域）
             const rect = trigger.getBoundingClientRect();
             const distanceToLeft = rect.left;
-            const distanceToRight = window.innerWidth - rect.right;
+            const distanceToRight = visibleWidth - rect.right;  // 使用调整后的可视宽度
             const distanceToTop = rect.top;
-            const distanceToBottom = window.innerHeight - rect.bottom;
+            const distanceToBottom = visibleHeight - rect.bottom;
             
             // 找到最近边缘
             const minDistance = Math.min(distanceToLeft, distanceToRight, distanceToTop, distanceToBottom);
@@ -407,7 +466,8 @@
                     trigger.style.right = 'auto';
                 } else if (distanceToRight === minDistance && distanceToRight < COLLAPSE_THRESHOLD) {
                     trigger.classList.add('collapsed-right');
-                    trigger.style.right = '0';
+                    // 如果侧边栏打开，右侧边缘应该是可视区域的右边缘
+                    trigger.style.right = sidebarOpen ? `${CONFIG.SIDEBAR_WIDTH}px` : '0';
                     trigger.style.left = 'auto';
                 } else if (distanceToTop === minDistance && distanceToTop < COLLAPSE_THRESHOLD) {
                     trigger.classList.add('collapsed-top');
@@ -483,8 +543,13 @@
             let newLeft = state.dragState.startLeft + deltaX;
             let newTop = state.dragState.startTop + deltaY;
             
-            const maxLeft = window.innerWidth - trigger.offsetWidth;
-            const maxTop = window.innerHeight - trigger.offsetHeight;
+            // 计算实际可视区域（考虑侧边栏是否打开）
+            const sidebarOpen = document.body.classList.contains('export-open');
+            const visibleWidth = sidebarOpen ? window.innerWidth - CONFIG.SIDEBAR_WIDTH : window.innerWidth;
+            const visibleHeight = window.innerHeight;
+            
+            const maxLeft = visibleWidth - trigger.offsetWidth;
+            const maxTop = visibleHeight - trigger.offsetHeight;
             
             newLeft = Math.max(0, Math.min(newLeft, maxLeft));
             newTop = Math.max(0, Math.min(newTop, maxTop));
@@ -496,11 +561,12 @@
             
             trigger.classList.remove('collapsed-left', 'collapsed-right', 'collapsed-top', 'collapsed-bottom');
             
+            // 边缘检测和自动贴合（使用实际可视区域）
             const rect = trigger.getBoundingClientRect();
             const distanceToLeft = rect.left;
-            const distanceToRight = window.innerWidth - rect.right;
+            const distanceToRight = visibleWidth - rect.right;  // 使用调整后的可视宽度
             const distanceToTop = rect.top;
-            const distanceToBottom = window.innerHeight - rect.bottom;
+            const distanceToBottom = visibleHeight - rect.bottom;
             
             const minDistance = Math.min(distanceToLeft, distanceToRight, distanceToTop, distanceToBottom);
             
@@ -511,7 +577,8 @@
                     trigger.style.right = 'auto';
                 } else if (distanceToRight === minDistance && distanceToRight < COLLAPSE_THRESHOLD) {
                     trigger.classList.add('collapsed-right');
-                    trigger.style.right = '0';
+                    // 如果侧边栏打开，右侧边缘应该是可视区域的右边缘
+                    trigger.style.right = sidebarOpen ? `${CONFIG.SIDEBAR_WIDTH}px` : '0';
                     trigger.style.left = 'auto';
                 } else if (distanceToTop === minDistance && distanceToTop < COLLAPSE_THRESHOLD) {
                     trigger.classList.add('collapsed-top');
