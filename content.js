@@ -537,6 +537,7 @@
                     <button class="gemini-btn-small" id="invert-select-btn">反选</button>
                     <button class="gemini-btn-small" id="clear-select-btn">清空</button>
                     <button class="gemini-btn-small" id="scroll-to-top-btn" title="滚动到顶部">⬆️</button>
+                    <button class="gemini-btn-small" id="scroll-to-bottom-btn" title="滚动到底部">⬇️</button>
                 </div>
             </div>
             <div class="gemini-preview" id="gemini-md-preview"><pre id="gemini-md-preview-pre">请在左侧勾选消息进行导出...</pre></div>
@@ -690,6 +691,15 @@
             }
         };
 
+        const scrollToBottom = () => {
+            const history = document.querySelector(CONFIG.SELECTORS.history);
+            if (history) {
+                history.scrollTo({ top: history.scrollHeight, behavior: 'smooth' });
+            } else {
+                window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+            }
+        };
+
         document.getElementById('close-gemini-export').onclick = toggleSidebar;
         document.getElementById('gemini-copy').onclick = handleCopy;
         document.getElementById('gemini-download').onclick = handleDownload;
@@ -697,6 +707,7 @@
         document.getElementById('invert-select-btn').onclick = handleInvertSelect;
         document.getElementById('clear-select-btn').onclick = handleClearSelect;
         document.getElementById('scroll-to-top-btn').onclick = scrollToTop;
+        document.getElementById('scroll-to-bottom-btn').onclick = scrollToBottom;
 
         // 为预览区域添加 Ctrl+A 全选功能
         setupPreviewSelectAll();
