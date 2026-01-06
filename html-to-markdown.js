@@ -450,6 +450,13 @@
                 let headerRow = null;
                 let dataRows = [];
                 
+                // 辅助函数：处理表格单元格文本，将换行符替换为空格
+                function processTableCellText(text) {
+                    if (!text) return '';
+                    // 将多个连续空白字符（包括换行符、制表符、空格）替换为单个空格
+                    return text.replace(/[\s\n\r\t]+/g, ' ').trim();
+                }
+                
                 // 处理表头
                 if (thead) {
                     headerRow = thead.querySelector('tr');
@@ -464,7 +471,7 @@
                 
                 if (headerRow) {
                     const headers = Array.from(headerRow.querySelectorAll('th, td')).map(cell => {
-                        const text = getChildrenText(cell).trim();
+                        const text = processTableCellText(getChildrenText(cell));
                         if (!text.startsWith('**') || !text.endsWith('**')) {
                             return `**${text}**`;
                         }
@@ -487,7 +494,7 @@
                 
                 dataRows.forEach(tr => {
                     const cells = Array.from(tr.querySelectorAll('td, th')).map(cell => 
-                        getChildrenText(cell).trim()
+                        processTableCellText(getChildrenText(cell))
                     );
                     if (cells.length > 0) {
                         rows.push('| ' + cells.join(' | ') + ' |');

@@ -63,6 +63,33 @@
         return '.mat-mdc-button-touch-target, button[aria-label*="copy" i], button[aria-label*="复制" i], [aria-label*="Copy" i]';
     }
 
+    // 检查扩展上下文是否有效
+    function isExtensionContextValid() {
+        try {
+            return chrome && chrome.runtime && chrome.runtime.id;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // 安全地获取存储值
+    async function safeGetStorage(keys, defaultValue = null) {
+        if (!isExtensionContextValid()) {
+            return defaultValue;
+        }
+        try {
+            const result = await chrome.storage.local.get(keys);
+            return result;
+        } catch (err) {
+            if (err.message && err.message.includes('Extension context invalidated')) {
+                console.warn('[Gemini Export] Extension context invalidated, using default value');
+                return defaultValue;
+            }
+            console.error('[Gemini Export] Failed to get storage:', err);
+            return defaultValue;
+        }
+    }
+
     function findCopyButton(element, maxDepth = 5) {
         let copyButton = element.querySelector(getCopyButtonSelector());
         if (copyButton) return copyButton;
@@ -1270,8 +1297,15 @@
     // --- 初始化 ---
     async function init() {
         // Check if extension is enabled
-        const result = await chrome.storage.local.get(['extensionEnabled']);
-        const enabled = result.extensionEnabled !== false; // Default to true
+        let enabled = true; // 默认启用
+        try {
+            const result = await safeGetStorage(['extensionEnabled'], { extensionEnabled: true });
+            enabled = result.extensionEnabled !== false; // Default to true
+        } catch (err) {
+            console.error('[Gemini Export] Failed to check extension status:', err);
+            // 如果出错，默认启用扩展
+            enabled = true;
+        }
         
         if (!enabled) {
             // Extension is disabled, remove any existing UI and return
