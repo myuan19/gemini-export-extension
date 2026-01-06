@@ -362,6 +362,7 @@
             .gemini-btn-small:hover { background: #f1f3f4; border-color: #1a73e8; }
             .gemini-preview { flex: 1; overflow-y: auto; padding: 20px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; background: #fff; color: #333; transition: background-color 0.3s, color 0.3s; cursor: text; }
             .gemini-preview:focus { background: #fafafa; }
+            .gemini-preview pre { margin: 0; padding: 0; white-space: pre-wrap; word-wrap: break-word; font-family: inherit; font-size: inherit; line-height: inherit; }
             .gemini-footer { padding: 16px; border-top: 1px solid #e0e0e0; background: #f8f9fa; display: flex; gap: 12px; transition: background-color 0.3s, border-color 0.3s, color 0.3s; }
             .gemini-btn { 
                 flex: 1; 
@@ -1198,16 +1199,18 @@
         const cleaned = getFinalMarkdown();
         const text = cleaned || "请勾选消息以开始导出";
         
-        // 使用 html-to-markdown.js 中的转义函数
-        const escaped = HTMLToMarkdown.escapeHtmlForPreview(text);
-        
+        // 直接使用原始文本，不进行 HTML 转义，确保显示和复制的内容一致
         if (preview && preview.tagName === 'PRE') {
-            preview.innerHTML = escaped;
+            preview.textContent = text;
         } else {
             // 如果不是 <pre>，确保使用 <pre> 标签
             const container = document.getElementById('gemini-md-preview');
             if (container) {
-                container.innerHTML = '<pre id="gemini-md-preview-pre">' + escaped + '</pre>';
+                const pre = document.createElement('pre');
+                pre.id = 'gemini-md-preview-pre';
+                pre.textContent = text;
+                container.innerHTML = '';
+                container.appendChild(pre);
             }
         }
     }
