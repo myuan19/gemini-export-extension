@@ -1252,7 +1252,33 @@
     }
 
     // --- 初始化 ---
-    function init() {
+    async function init() {
+        // Check if extension is enabled
+        const result = await chrome.storage.local.get(['extensionEnabled']);
+        const enabled = result.extensionEnabled !== false; // Default to true
+        
+        if (!enabled) {
+            // Extension is disabled, remove any existing UI and return
+            const sidebar = document.getElementById('gemini-export-sidebar');
+            const trigger = document.getElementById('gemini-export-trigger');
+            const column = document.getElementById('export-cb-column');
+            const themeStyle = document.getElementById('gemini-export-theme-style');
+            if (sidebar) sidebar.remove();
+            if (trigger) trigger.remove();
+            if (column) column.remove();
+            if (themeStyle) themeStyle.remove();
+            // Clean up observers
+            if (state.observer) {
+                state.observer.disconnect();
+                state.observer = null;
+            }
+            if (state.themeObserver) {
+                state.themeObserver.disconnect();
+                state.themeObserver = null;
+            }
+            return;
+        }
+        
         injectUI();
         const history = document.querySelector(CONFIG.SELECTORS.history);
         if (history) {
