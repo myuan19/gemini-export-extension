@@ -362,7 +362,20 @@
             .gemini-btn-small:hover { background: #f1f3f4; border-color: #1a73e8; }
             .gemini-preview { flex: 1; overflow-y: auto; padding: 20px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; background: #fff; color: #333; transition: background-color 0.3s, color 0.3s; cursor: text; }
             .gemini-preview:focus { background: #fafafa; }
-            .gemini-preview pre { margin: 0; padding: 0; white-space: pre-wrap; word-wrap: break-word; font-family: inherit; font-size: inherit; line-height: inherit; }
+            .gemini-preview pre { 
+                margin: 0; 
+                padding: 0; 
+                white-space: pre-wrap !important; 
+                word-wrap: break-word !important; 
+                overflow-wrap: break-word !important; 
+                word-break: break-word !important; 
+                font-family: inherit; 
+                font-size: inherit; 
+                line-height: inherit; 
+                width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
+            }
             .gemini-footer { padding: 16px; border-top: 1px solid #e0e0e0; background: #f8f9fa; display: flex; gap: 12px; transition: background-color 0.3s, border-color 0.3s, color 0.3s; }
             .gemini-btn { 
                 flex: 1; 
