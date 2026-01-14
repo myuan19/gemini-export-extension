@@ -29,7 +29,6 @@
 - ✅ **可拖动悬浮球** - 触发按钮可拖动到屏幕任意位置，支持边缘吸附和位置记忆
 - ✅ **自动主题适配** - 支持两种主题（深/浅），自动切换
 
-<img width="3264" height="3936" alt="NotebookLM Mind Map" src="https://github.com/user-attachments/assets/14f1faed-4a4c-467a-a1f5-3ef19d940182" />
 
 ## 📸 截图展示
 
@@ -129,6 +128,9 @@ cd gemini-export-extension
 - 界面会自动适配，完美融入 Gemini 界面
 
 > 💡 **提示**：悬浮球可以拖动到屏幕任意位置，靠近边缘时会自动吸附，位置会自动保存。
+
+## 思维导图
+<img width="3264" height="3936" alt="NotebookLM Mind Map" src="https://github.com/user-attachments/assets/14f1faed-4a4c-467a-a1f5-3ef19d940182" />
 
 ## 📄 许可证
 
