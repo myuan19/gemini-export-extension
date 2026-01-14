@@ -29,19 +29,22 @@
 - ✅ **可拖动悬浮球** - 触发按钮可拖动到屏幕任意位置，支持边缘吸附和位置记忆
 - ✅ **自动主题适配** - 支持两种主题（深/浅），自动切换
 
-
 ## 📸 截图展示
 
 ### 浅色主题
+
 ![浅色主题](./screenshots/white.png)
 
 ### 深色主题
+
 ![深色主题](./screenshots/dark.png)
 
 ### 悬浮球拖拽
+
 ![悬浮球拖拽](./screenshots/button.png)
 
 ### Notion 导入效果
+
 ![Notion 导入效果](./screenshots/notion.png)
 
 </div>
@@ -87,14 +90,15 @@ cd gemini-export-extension
 #### 基本使用
 
 1. **访问 Gemini**
+
    - 打开 [Google Gemini](https://gemini.google.com)
    - 登录你的 Google 账号
-
 2. **打开导出功能**
+
    - 页面右下角会出现一个蓝色的 **📄** 按钮
    - 点击按钮打开导出侧边栏
-
 3. **选择消息**
+
    - 左侧每条消息前会出现复选框
    - 勾选要导出的消息
    - 或使用顶部工具栏：
@@ -102,8 +106,8 @@ cd gemini-export-extension
      - **反选** - 反转当前选择状态
      - **清空** - 清除所有选择
      - **⬆️** - 快速滚动到对话顶部
-
 4. **导出内容**
+
    - 右侧会实时显示 Markdown 预览
    - 点击 **📋 复制内容** 复制到剪贴板
    - 或点击 **⬇️ 下载 Markdown** 下载文件
@@ -130,7 +134,8 @@ cd gemini-export-extension
 > 💡 **提示**：悬浮球可以拖动到屏幕任意位置，靠近边缘时会自动吸附，位置会自动保存。
 
 ## 思维导图
-<img width="3264" height="3936" alt="NotebookLM Mind Map" src="https://github.com/user-attachments/assets/14f1faed-4a4c-467a-a1f5-3ef19d940182" />
+
+![NotebookLM Mind Map](<screenshots/NotebookLM Mind Map.png>)
 
 ## 📄 许可证
 
