@@ -1,0 +1,56 @@
+使用 `uv tool install` 命令安装工具时，`uv` 会将它们存放在特定的目录中。为了保证工具的独立性，它会为每个工具创建一个隔离的虚拟环境。
+
+
+以下是不同操作系统下的默认安装路径：
+
+### 1. 默认安装路径
+
+| **内容类型** | **Windows** | **macOS / Linux** |
+| --- | --- | --- |
+| **可执行文件 (Binary)** | `%USERPROFILE%\.local\bin` | `~/.local/bin` |
+| **虚拟环境 (Tools)** | `%APPDATA%\uv\data\tools` | `~/.local/share/uv/tools` |
+
+---
+
+### 2. 深入理解安装逻辑
+
+
+当你运行 `uv tool install mitmproxy` 时，发生了两件事：
+
+
+- **创建环境**：`uv` 在上述的 `tools` 目录下为 `mitmproxy` 创建了一个专门的 Python 虚拟环境。
+- **创建符号链接/拷贝**：它会将该工具的可执行文件（如 `mitmproxy`, `mitmweb`）**软链接**（Unix）或**拷贝**（Windows）到 `bin` 目录下。
+
+### 3. 如何查看和更改路径
+
+
+如果你想在自己的机器上确认具体的路径，可以使用以下内置命令：
+
+
+- **查看工具安装根目录**：
+
+   ```bash
+   uv tool dir
+   ```
+- **查看可执行文件所在的目录**（通常你应该把这个目录添加到你的系统 `PATH` 中）：
+
+   ```bash
+   uv tool dir --bin
+   ```
+
+
+**修改路径：**
+如果你希望更改默认位置，可以通过设置环境变量来实现：
+
+
+- 设置 `UV_TOOL_DIR` 来更改虚拟环境的存放位置。
+- 设置 `UV_TOOL_BIN_DIR` 来更改可执行文件的存放位置。
+
+---
+
+
+**你想确认这个路径是为了备份工具环境，还是因为安装后在终端找不到命令？** 如果是后者，通常只需要将 `uv tool dir --bin` 返回的路径手动加入系统的环境变量 `PATH` 即可。
+
+
+uv: The Fastest Way to Install (and Use) Python
+这个视频详细介绍了如何使用 uv 高效管理 Python 工具和环境，包括其安装机制的演示。uv: The Fastest Way to Install (and Use) Python - YouTubeShaw Talebi · 5,726 次观看
