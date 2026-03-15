@@ -5,7 +5,7 @@
 一个用于导出 Google Gemini 对话为 Markdown 格式的浏览器插件
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-blue?logo=google-chrome)](https://chrome.google.com/webstore)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-blue?logo=google-chrome)](https://chromewebstore.google.com/detail/gemini-to-markdown/ieemmnchdndcdkgjajdooimfcgmmdgag)
 [![Version](https://img.shields.io/badge/version-1.1.0-blue)](https://github.com/myuan19/gemini-export-extension)
 [![GitHub stars](https://img.shields.io/github/stars/myuan19/gemini-export-extension.svg?style=social&label=Star)](https://github.com/myuan19/gemini-export-extension)
 
